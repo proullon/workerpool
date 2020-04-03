@@ -65,3 +65,33 @@ WorkerPool will measure the velocity to find the most effective number of worker
 
 This means increasing the number of worker too find the highest op/s possible. It also means reducing the number of worker if the job takes longer at some point for some reason (network traffic, database load, etc) then increasing again as soon as possible. `EvaluationTime` defines the sampling period and the duration between WorkerPool size change. `MaxDuration` parameter ensures `WorkerPool` won't overload the client resource.
 
+## Response channel
+
+Worker response are stored in an internal list. This allows user to read responses whenever ready without impacting worker, they will not lock.
+
+```go
+func Work() {
+	wp, _ := New(nil, testJob, workerpool.WithMaxWorker(10), workerpool.WithEvaluationTime(1))
+
+	for i := 0; i < 100; i++ {
+		wp.Feed(i)
+	}
+
+	wp.Wait()
+
+	n := wp.AvailableResponses() // n = 100
+	
+  // read all responses
+	var count int
+	for count = 0; count < 100; count++ {
+		r := <-wp.ReturnChannel
+		if r.Err != nil {
+			panic("Expected all errors to be nil")
+		}
+	}
+
+	n = wp.AvailableResponses() // n = 0
+}
+```
+
+
