@@ -147,6 +147,17 @@ func (wp *WorkerPool) Stop() {
 	close(wp.jobch)
 }
 
+// Pause all workers with killing them
+func (wp *WorkerPool) Pause() {
+	wp.Lock()
+}
+
+// Resume all workers
+func (wp *WorkerPool) Resume() {
+	wp.Unlock()
+}
+
+// Feed payload to worker
 func (wp *WorkerPool) Feed(payload interface{}) {
 	wp.jobch <- payload
 	wp.Add(1)
