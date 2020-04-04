@@ -112,3 +112,35 @@ func TestResponses(t *testing.T) {
 		t.Errorf("Expected 0 responses, got %d", n)
 	}
 }
+
+func TestAllIn(t *testing.T) {
+
+	wp, err := New(&Config{}, testJob,
+		WithMaxWorker(1000),
+		WithEvaluationTime(2),
+		WithSizePercentil(AllInSizesPercentil),
+	)
+
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+
+	for i := 0; i < 100000; i++ {
+		wp.Feed(i)
+	}
+
+	// wait for completion
+	wp.Wait()
+	// stop workerpool
+	wp.Stop()
+
+	// check current velocity
+	percentil, ops := wp.CurrentVelocityValues()
+	t.Logf("Current velocity: %d%% -> %d op/s\n", percentil, ops)
+	if percentil != 100 {
+		t.Errorf("Expected use of full size, got %d%%", percentil)
+	}
+	if ops != 10000 {
+		t.Errorf("Expected 10000 op/s with 1000 worker doing 10 op/s each, got %d", ops)
+	}
+}

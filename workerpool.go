@@ -263,7 +263,7 @@ func (wp *WorkerPool) velocityRoutine() {
 		wp.vm.Unlock()
 
 		// always increase from first value
-		if wp.sizeindex == 0 {
+		if wp.sizeindex == 0 && wp.sizeindex < len(wp.SizePercentil)-1 {
 			//			fmt.Printf("VelocityRoutine: increasing because sizeindex=0\n")
 			wp.setsize(wp.sizeindex + 1)
 			continue
