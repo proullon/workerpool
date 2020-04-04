@@ -37,6 +37,33 @@ func jobfnc(c interface{}, p interface{}) (interface{}, error) {
 }
 ```
 
+Example behavior with network and database operation:
+```
+Velocity:
+1% : 10op/s
+2% : 21op/s
+3% : 31op/s
+4% : 43op/s
+5% : 50op/s
+6% : 55op/s
+7% : 66op/s
+8% : 80op/s
+9% : 84op/s
+10% : 85op/s
+11% : 92op/s
+12% : 95op/s
+13% : 101op/s
+14% : 103op/s
+15% : 108op/s
+16% : 141op/s
+17% : 163op/s
+18% : 143op/s
+19% : 145op/s
+20% : 145op/s
+21% : 119op/s
+Current velocity: 17% -> 163 op/s
+```
+
 ## Options
 
 ```go
