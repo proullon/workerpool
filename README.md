@@ -6,17 +6,17 @@ Auto scaling generic worker pool. WorkerPool will adapt the number of goroutine 
 
 ```go
 func work(config *Config) error {
-	wp, err := workerpool.New(config, jobfnc)
-	if err != nil {
-	  return err
+  wp, err := workerpool.New(config, jobfnc)
+  if err != nil {
+    return err
   }
 
-	for i := 0; i < 100000; i++ {
-		wp.Feed(i)
-	}
+  for i := 0; i < 100000; i++ {
+    wp.Feed(i)
+  }
 
-	// wait for completion
-	wp.Wait()
+  // wait for completion
+  wp.Wait()
 
   return nil
 }
@@ -117,28 +117,29 @@ Call to `Stop()` will close `ReturnChannel` once all stored responses have been 
 
 ```go
 func Work() {
-	wp, _ := New(nil, testJob, workerpool.WithMaxWorker(10), workerpool.WithEvaluationTime(1))
+  wp, _ := New(nil, testJob, workerpool.WithMaxWorker(10), workerpool.WithEvaluationTime(1))
 
-	for i := 0; i < 100; i++ {
-		wp.Feed(i)
-	}
+  for i := 0; i < 100; i++ {
+    wp.Feed(i)
+  }
 
-	wp.Wait()
+  wp.Wait()
 
-	n := wp.AvailableResponses() // n = 100
+  n := wp.AvailableResponses() // n = 100
 
   wp.Stop()
 	
   // read all responses
   var count int
-	for r := range wp.ReturnChannel {
-		count++
-		if r.Err != nil {
-			panic("Expected all errors to be nil")
-		}
-	}
+  for r := range wp.ReturnChannel {
+    count++
+    if r.Err != nil {
+      panic("Expected all errors to be nil")
+    }
+  }
 
-	n = wp.AvailableResponses() // n = 0
+  // count = 100
+  n = wp.AvailableResponses() // n = 0
 }
 ```
 
