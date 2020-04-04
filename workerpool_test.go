@@ -84,10 +84,12 @@ func TestResponses(t *testing.T) {
 		t.Errorf("Expected 100 responses, got %d", n)
 	}
 
+	wp.Stop()
+
 	// read all responses
 	var count int
-	for count = 0; count < 100; count++ {
-		r := <-wp.ReturnChannel
+	for r := range wp.ReturnChannel {
+		count++
 		if r.Err != nil {
 			t.Errorf("Expected all errors to be nil")
 		}
@@ -102,6 +104,4 @@ func TestResponses(t *testing.T) {
 	if n != 0 {
 		t.Errorf("Expected 0 responses, got %d", n)
 	}
-
-	wp.Stop()
 }

@@ -300,11 +300,13 @@ func (wp *WorkerPool) pushResponse(r Response) {
 func (wp *WorkerPool) responseRoutine() {
 	var n int
 	for {
-		if wp.stopped {
+		n = wp.AvailableResponses()
+
+		if wp.stopped && n == 0 {
+			close(wp.ReturnChannel)
 			return
 		}
 
-		n = wp.AvailableResponses()
 		if n == 0 {
 			time.Sleep(1 * time.Millisecond)
 			continue

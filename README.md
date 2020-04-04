@@ -69,6 +69,8 @@ This means increasing the number of worker too find the highest op/s possible. I
 
 Worker response are stored in an internal list. This allows user to read responses whenever ready without impacting worker, they will not lock.
 
+Call to `Stop()` will close `ReturnChannel` once all stored responses have been read.
+
 ```go
 func Work() {
 	wp, _ := New(nil, testJob, workerpool.WithMaxWorker(10), workerpool.WithEvaluationTime(1))
@@ -80,11 +82,13 @@ func Work() {
 	wp.Wait()
 
 	n := wp.AvailableResponses() // n = 100
+
+  wp.Stop()
 	
   // read all responses
-	var count int
-	for count = 0; count < 100; count++ {
-		r := <-wp.ReturnChannel
+  var count int
+	for r := range wp.ReturnChannel {
+		count++
 		if r.Err != nil {
 			panic("Expected all errors to be nil")
 		}
