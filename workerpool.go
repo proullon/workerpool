@@ -7,22 +7,35 @@ import (
 )
 
 var (
+	// DefaultSizesPercentil defines regular increase ten by ten from 1 to 100.
 	DefaultSizesPercentil = []int{1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100}
-	// Worth only for long running operation
+	// AllSizesPercentil defines all percentils from 1 to 100. it allows WorkerPool to find the perfect sizing fo optimal velocity. Only worth for long running operation
 	AllSizesPercentil = []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100}
-	// Logarithmic distribution
+	// LogSizesPercentil defines a logarithmic distribution from 1 to 100. Perfect for job targeting client sensible to load.
 	LogSizesPercentil = []int{1, 15, 23, 30, 34, 38, 42, 45, 47, 50, 52, 54, 57, 58, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100}
+	// AllInSizesPercentil allows only 100% of workerpool, meaning WorkerPool will always use MaxWorker goroutines
+	AllInSizesPercentil = []int{100}
 )
 
+// JobFnc defines the job function executed by WorkerPool workers
 type JobFnc func(config interface{}, payload interface{}) (response interface{}, err error)
 
+// OptFunc defines functionnal parameter to New() function
 type OptFunc func(w *WorkerPool)
 
+// Response from workers. Can be read from ReturnChannel
 type Response struct {
 	Body interface{}
 	Err  error
 }
 
+// WorkerPool is an auto-scaling generic worker pool.
+//
+// Features include:
+// - Automatic scaling in response to effective velocity (op/s)
+// - Convenient worker response reading
+// - Automatic scale down uppon overload
+// - Easy goroutine cleanup
 type WorkerPool struct {
 	Config         interface{}
 	MaxDuration    time.Duration

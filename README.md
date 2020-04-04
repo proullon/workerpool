@@ -6,7 +6,7 @@ Auto scaling generic worker pool. WorkerPool will adapt the number of goroutine 
 
 ```go
 func work(config *Config) error {
-	wp, err := workerpool.New(config, genjobfnc)
+	wp, err := workerpool.New(config, jobfnc)
 	if err != nil {
 	  return err
   }
@@ -21,15 +21,19 @@ func work(config *Config) error {
   return nil
 }
 
-func genjobfnc(c interface{}, p interface{}) (interface{}, error) {
+func jobfnc(c interface{}, p interface{}) (interface{}, error) {
   config := c.(*Config)
   payload := p.(int)
-  return jobfnc(config, payload)
-}
-
-func jobfnc(c *Config, p int) (*Response, error) {
-  // do stuff
-  return resp, nil
+  f := func(c *Config, p int) (int, error) {
+    // do stuff
+    var id int
+    err := config.db.Exec(`INSERT into example (value, event_date) ($1, NOW()) RETURNING id`, p).Scan(&id)
+    if err != nil {
+      return nil, err
+    }
+    return id, nil
+  }
+  return f(config, payload)
 }
 ```
 
@@ -64,6 +68,19 @@ With 1000 max worker and default size percentil array, possible values are:
 WorkerPool will measure the velocity to find the most effective number of workers to achieve the best performance, increasing or decreasing the number of worker depending of the recorded velocity.
 
 This means increasing the number of worker too find the highest op/s possible. It also means reducing the number of worker if the job takes longer at some point for some reason (network traffic, database load, etc) then increasing again as soon as possible. `EvaluationTime` defines the sampling period and the duration between WorkerPool size change. `MaxDuration` parameter ensures `WorkerPool` won't overload the client resource.
+
+## Automatic scaling mode
+
+Scaling is affected by `MaxWorker`, `MaxDuration` and scaling pattern array `SizePercentil`. WorkerPool computes possible number ofworkers using `SizePercentil` of `MaxWorker`.
+
+`MaxDuration` defines the maximum duration wanted to execute a job. If a job takes longer than `MaxDuration`, worker will exit, affecting down current velocity.
+
+One can defines specific `SizePercentil` pattern using `WithSizePercentil` functionnal option to `New`.
+Predefined pattern are:
+  * DefaultSizesPercentil: Regular increase ten by ten from 1 to 100. Allows fast scaling.
+  * AllSizesPercentil: All percentils from 1 to 100. it allows WorkerPool to find the perfect sizing fo optimal velocity. Only worth for long running operation.
+  * LogSizesPercentil: Logarithmic distribution from 1 to 100. Perfect for job targeting client sensible to load.
+  * AllInSizesPercentil: Only 100% of workerpool, meaning WorkerPool will always use MaxWorker goroutines.
 
 ## Response channel
 

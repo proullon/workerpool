@@ -6,15 +6,22 @@ import (
 	"time"
 )
 
-func testJob(c interface{}, payload interface{}) (interface{}, error) {
-	//	fmt.Printf("ccouco\n")
-	time.Sleep(100 * time.Millisecond)
-	return nil, nil
+type Config struct {
+}
+
+func testJob(c interface{}, p interface{}) (interface{}, error) {
+	config := c.(*Config)
+	payload := p.(int)
+	f := func(c *Config, p int) (int, error) {
+		time.Sleep(100 * time.Millisecond)
+		return p * 2, nil
+	}
+	return f(config, payload)
 }
 
 func TestWorkerPool(t *testing.T) {
 
-	wp, err := New(nil, testJob,
+	wp, err := New(&Config{}, testJob,
 		WithMaxWorker(1000),
 		WithEvaluationTime(1),
 	)
@@ -63,7 +70,7 @@ func TestWorkerPool(t *testing.T) {
 }
 
 func TestResponses(t *testing.T) {
-	wp, err := New(nil, testJob,
+	wp, err := New(&Config{}, testJob,
 		WithMaxWorker(10),
 		WithEvaluationTime(1),
 	)
