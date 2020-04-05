@@ -121,7 +121,7 @@ func TestAllIn(t *testing.T) {
 	job := &Job{}
 	wp, err := New(job.execute,
 		WithMaxWorker(1000),
-		WithEvaluationTime(2),
+		WithEvaluationTime(1),
 		WithSizePercentil(AllInSizesPercentil),
 	)
 

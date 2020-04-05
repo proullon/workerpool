@@ -18,6 +18,8 @@ var (
 )
 
 // JobFnc defines the job function executed by WorkerPool workers
+//
+// Note: if both response and error are nil, response will not be stacked
 type JobFnc func(payload interface{}) (response interface{}, err error)
 
 // OptFunc defines functionnal parameter to New() function
@@ -237,10 +239,12 @@ func (wp *WorkerPool) worker() {
 		wp.Done()
 		wp.tick()
 
-		wp.pushResponse(Response{
-			Body: body,
-			Err:  err,
-		})
+		if body != nil || err != nil {
+			wp.pushResponse(Response{
+				Body: body,
+				Err:  err,
+			})
+		}
 
 		if shouldExit := wp.evaluate(t, err); shouldExit {
 			return
