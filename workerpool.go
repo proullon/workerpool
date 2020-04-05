@@ -18,7 +18,7 @@ var (
 )
 
 // JobFnc defines the job function executed by WorkerPool workers
-type JobFnc func(config interface{}, payload interface{}) (response interface{}, err error)
+type JobFnc func(payload interface{}) (response interface{}, err error)
 
 // OptFunc defines functionnal parameter to New() function
 type OptFunc func(w *WorkerPool)
@@ -37,7 +37,6 @@ type Response struct {
 // - Automatic scale down uppon overload
 // - Easy goroutine cleanup
 type WorkerPool struct {
-	Config         interface{}
 	MaxDuration    time.Duration
 	MaxWorker      int
 	Job            JobFnc
@@ -92,10 +91,9 @@ func WithMaxDuration(d time.Duration) OptFunc {
 	return fn
 }
 
-func New(config interface{}, jobfnc JobFnc, opts ...OptFunc) (*WorkerPool, error) {
+func New(jobfnc JobFnc, opts ...OptFunc) (*WorkerPool, error) {
 
 	wp := &WorkerPool{
-		Config:         config,
 		Job:            jobfnc,
 		MaxDuration:    3 * time.Second,
 		MaxWorker:      500,
@@ -219,10 +217,10 @@ func (wp *WorkerPool) timeexit(t time.Duration) bool {
 
 func (wp *WorkerPool) spawn() {
 	wp.active++
-	go wp.worker(wp.Config)
+	go wp.worker()
 }
 
-func (wp *WorkerPool) worker(config interface{}) {
+func (wp *WorkerPool) worker() {
 	var err error
 	var body interface{}
 
@@ -234,7 +232,7 @@ func (wp *WorkerPool) worker(config interface{}) {
 		}
 
 		begin := time.Now()
-		body, err = wp.Job(wp.Config, p)
+		body, err = wp.Job(p)
 		t := time.Since(begin)
 		wp.Done()
 		wp.tick()

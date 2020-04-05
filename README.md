@@ -5,8 +5,9 @@ Auto scaling generic worker pool. WorkerPool will adapt the number of goroutine 
 ## Example
 
 ```go
-func work(config *Config) error {
-  wp, err := workerpool.New(config, jobfnc)
+func work(db *sql.DB) error {
+  job := &Job{db:db}
+  wp, err := workerpool.New(job.execute)
   if err != nil {
     return err
   }
@@ -21,10 +22,13 @@ func work(config *Config) error {
   return nil
 }
 
-func jobfnc(c interface{}, p interface{}) (interface{}, error) {
-  config := c.(*Config)
+type Job struct {
+  db *sql.DB
+}
+
+func (j *Job) execute(p interface{}) (interface{}, error) {
   payload := p.(int)
-  f := func(c *Config, p int) (int, error) {
+  f := func(p int) (int, error) {
     // do stuff
     var id int
     err := config.db.Exec(`INSERT into example (value, event_date) ($1, NOW()) RETURNING id`, p).Scan(&id)
@@ -33,7 +37,7 @@ func jobfnc(c interface{}, p interface{}) (interface{}, error) {
     }
     return id, nil
   }
-  return f(config, payload)
+  return f(payload)
 }
 ```
 
@@ -68,7 +72,7 @@ Current velocity: 17% -> 163 op/s
 
 ```go
 func work(config *Config) {
-  wp, err := workerpool.New(config, jobfnc,
+  wp, err := workerpool.New(jobfnc,
     workerpool.WithMaxWorker(1000),
     workerpool.WithSizePercentil(workerpool.LogSizesPercentil),
     workerpool.EvaluationTime(1),
@@ -117,7 +121,7 @@ Call to `Stop()` will close `ReturnChannel` once all stored responses have been 
 
 ```go
 func Work() {
-  wp, _ := New(nil, testJob, workerpool.WithMaxWorker(10), workerpool.WithEvaluationTime(1))
+  wp, _ := New(testJob, workerpool.WithMaxWorker(10), workerpool.WithEvaluationTime(1))
 
   for i := 0; i < 100; i++ {
     wp.Feed(i)
@@ -142,5 +146,4 @@ func Work() {
   n = wp.AvailableResponses() // n = 0
 }
 ```
-
 

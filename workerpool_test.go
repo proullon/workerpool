@@ -6,22 +6,25 @@ import (
 	"time"
 )
 
-type Config struct {
+type Job struct {
+	count int
 }
 
-func testJob(c interface{}, p interface{}) (interface{}, error) {
-	config := c.(*Config)
+func (j *Job) execute(p interface{}) (interface{}, error) {
 	payload := p.(int)
-	f := func(c *Config, p int) (int, error) {
+	f := func(p int) (int, error) {
 		time.Sleep(100 * time.Millisecond)
+		j.count++
 		return p * 2, nil
 	}
-	return f(config, payload)
+	return f(payload)
 }
 
 func TestWorkerPool(t *testing.T) {
 
-	wp, err := New(&Config{}, testJob,
+	job := &Job{}
+
+	wp, err := New(job.execute,
 		WithMaxWorker(1000),
 		WithEvaluationTime(1),
 	)
@@ -70,7 +73,8 @@ func TestWorkerPool(t *testing.T) {
 }
 
 func TestResponses(t *testing.T) {
-	wp, err := New(&Config{}, testJob,
+	job := &Job{}
+	wp, err := New(job.execute,
 		WithMaxWorker(10),
 		WithEvaluationTime(1),
 	)
@@ -114,8 +118,8 @@ func TestResponses(t *testing.T) {
 }
 
 func TestAllIn(t *testing.T) {
-
-	wp, err := New(&Config{}, testJob,
+	job := &Job{}
+	wp, err := New(job.execute,
 		WithMaxWorker(1000),
 		WithEvaluationTime(2),
 		WithSizePercentil(AllInSizesPercentil),
