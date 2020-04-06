@@ -31,6 +31,14 @@ type Response struct {
 	Err  error
 }
 
+type Status string
+
+const (
+	Running Status = "running"
+	Paused  Status = "paused"
+	Stopped Status = "stopped"
+)
+
 // WorkerPool is an auto-scaling generic worker pool.
 //
 // Features include:
@@ -46,6 +54,7 @@ type WorkerPool struct {
 	SizePercentil  []int
 	EvaluationTime int
 
+	status  Status
 	stopped bool
 
 	jobch  chan interface{}
@@ -104,6 +113,7 @@ func New(jobfnc JobFnc, opts ...OptFunc) (*WorkerPool, error) {
 		ops:            make(map[int]int),
 		velocity:       make(map[int]int),
 		responses:      list.New(),
+		status:         Running,
 	}
 
 	// apply options
@@ -144,17 +154,25 @@ func (wp *WorkerPool) CurrentVelocityValues() (int, int) {
 
 func (wp *WorkerPool) Stop() {
 	wp.stopped = true
+	wp.status = Stopped
 	close(wp.jobch)
 }
 
 // Pause all workers with killing them
 func (wp *WorkerPool) Pause() {
 	wp.Lock()
+	wp.status = Paused
 }
 
 // Resume all workers
 func (wp *WorkerPool) Resume() {
 	wp.Unlock()
+	wp.status = Running
+}
+
+// Status return WorkerPool current status
+func (wp *WorkerPool) Status() Status {
+	return wp.status
 }
 
 // Feed payload to worker
