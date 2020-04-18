@@ -18,6 +18,11 @@ func (j *Job) execute(p interface{}) (interface{}, error) {
 	return f(payload)
 }
 
+func (j *Job) slow(p interface{}) (interface{}, error) {
+	time.Sleep(3 * time.Second)
+	return nil, nil
+}
+
 func TestWorkerPool(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping test in short mode.")
@@ -46,7 +51,7 @@ func TestWorkerPool(t *testing.T) {
 	wp.Stop()
 
 	// check velocity
-	var previous int
+	var previous float64
 	v := wp.VelocityValues()
 	t.Logf("Velocity:\n")
 	for i := 1; i <= 100; i++ {
@@ -54,21 +59,21 @@ func TestWorkerPool(t *testing.T) {
 		if !ok {
 			continue
 		}
-		t.Logf("%d%% -> %d op/s", i, velocity)
+		t.Logf("%d%% -> %f op/s", i, velocity)
 		if velocity < previous {
-			t.Errorf("Expected velocity to increase steadily, got %d with previous %d", velocity, previous)
+			t.Errorf("Expected velocity to increase steadily, got %f with previous %f", velocity, previous)
 		}
 		previous = velocity
 	}
 
 	// check current velocity
 	percentil, ops := wp.CurrentVelocityValues()
-	t.Logf("Current velocity: %d%% -> %d op/s\n", percentil, ops)
+	t.Logf("Current velocity: %d%% -> %f op/s\n", percentil, ops)
 	if percentil != 100 {
 		t.Errorf("Expected use of full size, got %d%%", percentil)
 	}
 	if ops < 9500 {
-		t.Errorf("Expected around 10000 op/s with 1000 worker doing 10 op/s each, got %d", ops)
+		t.Errorf("Expected around 10000 op/s with 1000 worker doing 10 op/s each, got %f", ops)
 	}
 
 }
@@ -148,11 +153,55 @@ func TestAllIn(t *testing.T) {
 
 	// check current velocity
 	percentil, ops := wp.CurrentVelocityValues()
-	t.Logf("Current velocity: %d%% -> %d op/s\n", percentil, ops)
+	t.Logf("Current velocity: %d%% -> %f op/s\n", percentil, ops)
 	if percentil != 100 {
 		t.Errorf("Expected use of full size, got %d%%", percentil)
 	}
 	if ops < 9500 {
-		t.Errorf("Expected around 10000 op/s with 1000 worker doing 10 op/s each, got %d", ops)
+		t.Errorf("Expected around 10000 op/s with 1000 worker doing 10 op/s each, got %f", ops)
 	}
+}
+
+func TestSlow(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
+	job := &Job{}
+
+	wp, err := New(job.slow,
+		WithMaxWorker(100),
+		WithEvaluationTime(5),
+		WithSizePercentil(AllSizesPercentil),
+	)
+
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+
+	for i := 0; i < 40; i++ {
+		wp.Feed(i)
+	}
+
+	// wait for completion
+	wp.Wait()
+	// stop workerpool
+	wp.Stop()
+
+	// check velocity
+	var previous float64
+	v := wp.VelocityValues()
+	t.Logf("Velocity:\n")
+	for i := 1; i <= 100; i++ {
+		velocity, ok := v[i]
+		if !ok {
+			continue
+		}
+		t.Logf("%d%% -> %f op/s", i, velocity)
+		if velocity < previous {
+			t.Errorf("Expected velocity to increase steadily, got %f with previous %f", velocity, previous)
+		}
+		previous = velocity
+	}
+
 }

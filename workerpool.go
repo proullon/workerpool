@@ -61,7 +61,7 @@ type WorkerPool struct {
 	active int
 	wanted int
 
-	velocity  map[int]int
+	velocity  map[int]float64
 	ops       map[int]int
 	sizeindex int
 
@@ -110,7 +110,7 @@ func New(jobfnc JobFnc, opts ...OptFunc) (*WorkerPool, error) {
 		SizePercentil:  DefaultSizesPercentil,
 		EvaluationTime: 5,
 		ops:            make(map[int]int),
-		velocity:       make(map[int]int),
+		velocity:       make(map[int]float64),
 		responses:      list.New(),
 		status:         Running,
 	}
@@ -133,8 +133,8 @@ func New(jobfnc JobFnc, opts ...OptFunc) (*WorkerPool, error) {
 }
 
 // VelocityValues returns map of recorded velocity for each used velocity percentil
-func (wp *WorkerPool) VelocityValues() map[int]int {
-	c := make(map[int]int)
+func (wp *WorkerPool) VelocityValues() map[int]float64 {
+	c := make(map[int]float64)
 	wp.mu.RLock()
 	for k, v := range wp.velocity {
 		c[k] = v
@@ -143,7 +143,7 @@ func (wp *WorkerPool) VelocityValues() map[int]int {
 	return c
 }
 
-func (wp *WorkerPool) CurrentVelocityValues() (int, int) {
+func (wp *WorkerPool) CurrentVelocityValues() (int, float64) {
 	i := wp.index()
 	wp.mu.RLock()
 	p := wp.SizePercentil[i]
@@ -300,7 +300,7 @@ func (wp *WorkerPool) velocityRoutine() {
 		i := wp.index()
 
 		wp.mu.Lock()
-		wp.velocity[wp.SizePercentil[i]] = wp.ops[wp.SizePercentil[i]] / wp.EvaluationTime
+		wp.velocity[wp.SizePercentil[i]] = float64(wp.ops[wp.SizePercentil[i]]) / float64(wp.EvaluationTime)
 		wp.mu.Unlock()
 
 		wp.mu.RLock()
