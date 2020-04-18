@@ -19,6 +19,9 @@ func (j *Job) execute(p interface{}) (interface{}, error) {
 }
 
 func TestWorkerPool(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
 
 	job := &Job{}
 
@@ -116,6 +119,11 @@ func TestResponses(t *testing.T) {
 }
 
 func TestAllIn(t *testing.T) {
+
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
 	job := &Job{}
 	wp, err := New(job.execute,
 		WithMaxWorker(1000),
