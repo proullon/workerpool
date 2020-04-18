@@ -7,14 +7,12 @@ import (
 )
 
 type Job struct {
-	count int
 }
 
 func (j *Job) execute(p interface{}) (interface{}, error) {
 	payload := p.(int)
 	f := func(p int) (int, error) {
 		time.Sleep(100 * time.Millisecond)
-		j.count++
 		return p * 2, nil
 	}
 	return f(payload)
