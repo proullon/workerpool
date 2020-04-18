@@ -67,13 +67,15 @@ func TestWorkerPool(t *testing.T) {
 	if percentil != 100 {
 		t.Errorf("Expected use of full size, got %d%%", percentil)
 	}
-	if ops != 10000 {
-		t.Errorf("Expected 10000 op/s with 1000 worker doing 10 op/s each, got %d", ops)
+	if ops < 9500 {
+		t.Errorf("Expected around 10000 op/s with 1000 worker doing 10 op/s each, got %d", ops)
 	}
 
 }
 
 func TestResponses(t *testing.T) {
+	taskcount := 15
+
 	job := &Job{}
 	wp, err := New(job.execute,
 		WithMaxWorker(10),
@@ -84,7 +86,7 @@ func TestResponses(t *testing.T) {
 		t.Errorf(err.Error())
 	}
 
-	for i := 0; i < 100; i++ {
+	for i := 0; i < taskcount; i++ {
 		wp.Feed(i)
 	}
 
@@ -92,8 +94,8 @@ func TestResponses(t *testing.T) {
 
 	n := wp.AvailableResponses()
 	fmt.Printf("Available responses: %d\n", n)
-	if n != 100 {
-		t.Errorf("Expected 100 responses, got %d", n)
+	if n != taskcount {
+		t.Errorf("Expected %d responses, got %d", taskcount, n)
 	}
 
 	wp.Stop()
@@ -107,8 +109,8 @@ func TestResponses(t *testing.T) {
 		}
 	}
 
-	if count != 100 {
-		t.Errorf("Expected response count to be 100, got %d", count)
+	if count != taskcount {
+		t.Errorf("Expected response count to be %d, got %d", taskcount, count)
 	}
 
 	n = wp.AvailableResponses()
@@ -150,7 +152,7 @@ func TestAllIn(t *testing.T) {
 	if percentil != 100 {
 		t.Errorf("Expected use of full size, got %d%%", percentil)
 	}
-	if ops != 10000 {
-		t.Errorf("Expected 10000 op/s with 1000 worker doing 10 op/s each, got %d", ops)
+	if ops < 9500 {
+		t.Errorf("Expected around 10000 op/s with 1000 worker doing 10 op/s each, got %d", ops)
 	}
 }
