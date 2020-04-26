@@ -184,8 +184,8 @@ func (wp *WorkerPool) Status() Status {
 
 // Feed payload to worker
 func (wp *WorkerPool) Feed(payload interface{}) {
-	wp.jobch <- payload
 	wp.Add(1)
+	wp.jobch <- payload
 }
 
 // AvailableResponses returns the current number of stacked responses. Consume ReturnChannel to read them
