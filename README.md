@@ -146,4 +146,9 @@ func Work() {
   n = wp.AvailableResponses() // n = 0
 }
 ```
+## Retry
 
+When specified using `WithRetry`, WorkerPool will run again jobs failing with given
+payload until success or specified retry value.
+
+Note: only error from the last try is returned via `ReturnChannel`.

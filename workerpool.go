@@ -31,6 +31,13 @@ type Response struct {
 	Err  error
 }
 
+// Payload contains actual payload push via Feed()
+// and metadata like try number
+type Payload struct {
+	Body interface{}
+	Try  int
+}
+
 type Status string
 
 const (
@@ -53,11 +60,12 @@ type WorkerPool struct {
 	ReturnChannel  chan Response
 	SizePercentil  []int
 	EvaluationTime int
+	Retry          int
 
 	status  Status
 	stopped bool
 
-	jobch  chan interface{}
+	jobch  chan *Payload
 	active int
 	wanted int
 
@@ -72,6 +80,20 @@ type WorkerPool struct {
 	mu sync.RWMutex
 }
 
+// WithRetry instructs new WorkerPool to
+// retry payload n times on error.
+// Note: error is only sent to ReturnChannel on last retry
+// Default is 0
+func WithRetry(n int) OptFunc {
+	fn := func(wp *WorkerPool) {
+		wp.Retry = n
+	}
+	return fn
+}
+
+// WithMaxWorker instructs new WorkerPool to
+// limit the maximum number of goroutine to max.
+// Default is 500
 func WithMaxWorker(max int) OptFunc {
 	fn := func(wp *WorkerPool) {
 		wp.MaxWorker = max
@@ -79,6 +101,8 @@ func WithMaxWorker(max int) OptFunc {
 	return fn
 }
 
+// WithSizePercentil creates new WorkerPool
+// with given SizePercentil. Default is DefaultSizesPercentil
 func WithSizePercentil(s []int) OptFunc {
 	fn := func(wp *WorkerPool) {
 		wp.SizePercentil = s
@@ -121,7 +145,7 @@ func New(jobfnc JobFnc, opts ...OptFunc) (*WorkerPool, error) {
 	}
 
 	wp.ReturnChannel = make(chan Response)
-	wp.jobch = make(chan interface{}, wp.MaxWorker)
+	wp.jobch = make(chan *Payload, wp.MaxWorker)
 
 	// spawn the first size worker
 	wp.setsize(0)
@@ -183,8 +207,13 @@ func (wp *WorkerPool) Status() Status {
 }
 
 // Feed payload to worker
-func (wp *WorkerPool) Feed(payload interface{}) {
+func (wp *WorkerPool) Feed(body interface{}) {
 	wp.Add(1)
+	payload := &Payload{
+		Body: body,
+		Try:  0,
+	}
+
 	wp.jobch <- payload
 }
 
@@ -253,16 +282,23 @@ func (wp *WorkerPool) worker() {
 		}
 
 		begin := time.Now()
-		body, err = wp.Job(p)
+		body, err = wp.Job(p.Body)
 		t := time.Since(begin)
-		wp.Done()
 		wp.tick()
 
-		if body != nil || err != nil {
+		if body != nil || (err != nil && p.Try == wp.Retry) {
 			wp.pushResponse(Response{
 				Body: body,
 				Err:  err,
 			})
+		}
+
+		// maybe retry
+		if err != nil && p.Try < wp.Retry {
+			p.Try++
+			wp.retry(p)
+		} else {
+			wp.Done()
 		}
 
 		if shouldExit := wp.evaluate(t, err); shouldExit {
@@ -382,4 +418,10 @@ func (wp *WorkerPool) responseRoutine() {
 		wp.responses.Remove(e)
 		wp.respmu.Unlock()
 	}
+}
+
+func (wp *WorkerPool) retry(payload *Payload) {
+	go func() {
+		wp.jobch <- payload
+	}()
 }

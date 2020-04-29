@@ -2,6 +2,7 @@ package workerpool
 
 import (
 	"fmt"
+	"math/rand"
 	"testing"
 	"time"
 )
@@ -20,6 +21,14 @@ func (j *Job) execute(p interface{}) (interface{}, error) {
 
 func (j *Job) slow(p interface{}) (interface{}, error) {
 	time.Sleep(3 * time.Second)
+	return nil, nil
+}
+
+func (j *Job) unreliable(p interface{}) (interface{}, error) {
+	n := rand.Intn(100)
+	if n%2 == 0 {
+		return nil, fmt.Errorf("fail hehe")
+	}
 	return nil, nil
 }
 
@@ -202,6 +211,70 @@ func TestSlow(t *testing.T) {
 			t.Errorf("Expected velocity to increase steadily, got %f with previous %f", velocity, previous)
 		}
 		previous = velocity
+	}
+
+}
+
+/*
+** Test retry feature with unreliable job (ie: network)
+ */
+func TestRetry(t *testing.T) {
+	E := 30
+	job := &Job{}
+
+	wp, err := New(job.unreliable,
+		WithRetry(0),
+		WithMaxWorker(100),
+		WithEvaluationTime(1),
+		WithSizePercentil(LogSizesPercentil),
+	)
+
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+
+	n := 1000
+	for i := 0; i < n; i++ {
+		wp.Feed(i)
+	}
+
+	// wait for completion
+	wp.Wait()
+	// stop workerpool
+	wp.Stop()
+
+	// Without retry unreliable job with 50% failure, we should have n/2 errors
+	nerrors := wp.AvailableResponses()
+	if nerrors < (n/2)-E || nerrors > (n/2)+E {
+		t.Errorf("WithRetry(0): Expected ~%d errors (50%% of %d), got %d", n/2, n, nerrors)
+	}
+
+	// now that control test is established, run with retry
+	wp, err = New(job.unreliable,
+		WithRetry(5),
+		WithMaxWorker(100),
+		WithEvaluationTime(1),
+		WithSizePercentil(LogSizesPercentil),
+	)
+
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+
+	n = 1000
+	for i := 0; i < n; i++ {
+		wp.Feed(i)
+	}
+
+	// wait for completion
+	wp.Wait()
+	// stop workerpool
+	wp.Stop()
+
+	// With 3 possible retry, we should have close to 0 errors
+	nerrors = wp.AvailableResponses()
+	if nerrors > E {
+		t.Errorf("WithRetry(5): Expected ~0 errors, got %d", nerrors)
 	}
 
 }
