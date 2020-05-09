@@ -65,6 +65,8 @@ type WorkerPool struct {
 	status  Status
 	stopped bool
 
+	jobmu  sync.Mutex
+	jobq   *list.List
 	jobch  chan *Payload
 	active int
 	wanted int
@@ -136,6 +138,7 @@ func New(jobfnc JobFnc, opts ...OptFunc) (*WorkerPool, error) {
 		ops:            make(map[int]int),
 		velocity:       make(map[int]float64),
 		responses:      list.New(),
+		jobq:           list.New(),
 		status:         Running,
 	}
 
@@ -152,6 +155,7 @@ func New(jobfnc JobFnc, opts ...OptFunc) (*WorkerPool, error) {
 	// start velocity routine
 	go wp.velocityRoutine()
 	go wp.responseRoutine()
+	go wp.feedRoutine()
 
 	return wp, nil
 }
@@ -183,7 +187,6 @@ func (wp *WorkerPool) Stop() {
 	defer wp.mu.Unlock()
 	wp.stopped = true
 	wp.status = Stopped
-	close(wp.jobch)
 }
 
 // Pause all workers with killing them
@@ -209,12 +212,44 @@ func (wp *WorkerPool) Status() Status {
 // Feed payload to worker
 func (wp *WorkerPool) Feed(body interface{}) {
 	wp.Add(1)
-	payload := &Payload{
-		Body: body,
-		Try:  0,
-	}
 
-	wp.jobch <- payload
+	wp.jobmu.Lock()
+	defer wp.jobmu.Unlock()
+	wp.jobq.PushBack(body)
+}
+
+func (wp *WorkerPool) feedRoutine() {
+	for {
+		if wp.isStopped() {
+			close(wp.jobch)
+			return
+		}
+
+		wp.jobmu.Lock()
+		n := wp.jobq.Len()
+		wp.jobmu.Unlock()
+
+		if n == 0 {
+			time.Sleep(1 * time.Millisecond)
+			continue
+		}
+
+		wp.jobmu.Lock()
+		e := wp.jobq.Front()
+		body := e.Value
+		wp.jobmu.Unlock()
+
+		payload := &Payload{
+			Body: body,
+			Try:  0,
+		}
+
+		wp.jobch <- payload
+
+		wp.jobmu.Lock()
+		wp.jobq.Remove(e)
+		wp.jobmu.Unlock()
+	}
 }
 
 // AvailableResponses returns the current number of stacked responses. Consume ReturnChannel to read them
