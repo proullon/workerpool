@@ -383,7 +383,7 @@ func (wp *WorkerPool) velocityRoutine() {
 			continue
 		}
 		// if velocity is 0, decrease
-		if wp.velocity[wp.SizePercentil[i]] == 0 {
+		if i > 0 && wp.velocity[wp.SizePercentil[i]] == 0 {
 			wp.mu.RUnlock()
 			wp.setsize(i - 1)
 			continue
