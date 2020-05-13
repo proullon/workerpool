@@ -2,6 +2,7 @@ package workerpool
 
 import (
 	"container/list"
+	"runtime"
 	"sync"
 	"time"
 )
@@ -132,7 +133,7 @@ func New(jobfnc JobFnc, opts ...OptFunc) (*WorkerPool, error) {
 	wp := &WorkerPool{
 		Job:            jobfnc,
 		MaxDuration:    3 * time.Second,
-		MaxWorker:      500,
+		MaxWorker:      runtime.NumCPU(),
 		SizePercentil:  DefaultSizesPercentil,
 		EvaluationTime: 5,
 		ops:            make(map[int]int),

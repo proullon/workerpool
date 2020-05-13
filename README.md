@@ -81,7 +81,7 @@ func work(config *Config) {
 }
 ```
 
-`MaxWorker` defines the maximum parallelisation possible, `SizePercentil` defines all the pool size possible by reference to `MaxWorker`.
+`MaxWorker` defines the maximum parallelisation possible, `SizePercentil` defines all the pool size possible by reference to `MaxWorker`. Default value for MaxWorker is `runtime.MaxCPU`
 
 With 1000 max worker and default size percentil array, possible values are:
   * 1% -> 10 workers
