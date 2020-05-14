@@ -278,3 +278,24 @@ func TestRetry(t *testing.T) {
 	}
 
 }
+
+func TestMaxQueue(t *testing.T) {
+	job := &Job{}
+
+	wp, err := New(job.execute,
+		WithMaxQueue(10),
+	)
+
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+
+	for i := 0; i < 100; i++ {
+		wp.Feed(i)
+	}
+
+	// wait for completion
+	wp.Wait()
+	// stop workerpool
+	wp.Stop()
+}

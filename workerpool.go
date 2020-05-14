@@ -55,13 +55,24 @@ const (
 // - Automatic scale down uppon overload
 // - Easy goroutine cleanup
 type WorkerPool struct {
-	MaxDuration    time.Duration
-	MaxWorker      int
-	Job            JobFnc
-	ReturnChannel  chan Response
-	SizePercentil  []int
+	// MaxDuration sets the maximum allowed duration to execute a job
+	MaxDuration time.Duration
+	// MaxWorker defines the maximum goroutine executing Job concurrently
+	MaxWorker int
+	// Job to be executed by WorkerPool
+	Job JobFnc
+	// ReturnChannel contains JobFnc returned values
+	ReturnChannel chan Response
+	// SizePercentil sets the possible percentage of MaxWorker usable by WorkerPool
+	SizePercentil []int
+	// EvaluationTime represents the duration of velocity collection
 	EvaluationTime int
-	Retry          int
+	// Retry will fead again payload N times on failure
+	// returning error only on last fail
+	Retry int
+	// MaxQueue limits the number of items in the queue.
+	// 0 is unlimited, using list.List
+	MaxQueue int
 
 	status  Status
 	stopped bool
@@ -128,6 +139,14 @@ func WithMaxDuration(d time.Duration) OptFunc {
 	return fn
 }
 
+// WithMaxQueue limits queue size, sometimes you may risk OOM kill...
+func WithMaxQueue(max int) OptFunc {
+	fn := func(wp *WorkerPool) {
+		wp.MaxQueue = max
+	}
+	return fn
+}
+
 func New(jobfnc JobFnc, opts ...OptFunc) (*WorkerPool, error) {
 
 	wp := &WorkerPool{
@@ -156,7 +175,9 @@ func New(jobfnc JobFnc, opts ...OptFunc) (*WorkerPool, error) {
 	// start velocity routine
 	go wp.velocityRoutine()
 	go wp.responseRoutine()
-	go wp.feedRoutine()
+	if wp.MaxQueue == 0 {
+		go wp.feedRoutine()
+	}
 
 	return wp, nil
 }
@@ -212,11 +233,29 @@ func (wp *WorkerPool) Status() Status {
 
 // Feed payload to worker
 func (wp *WorkerPool) Feed(body interface{}) {
+	if wp.MaxQueue > 0 {
+		wp.feedSync(body)
+	} else {
+		wp.feedAsync(body)
+	}
+}
+
+func (wp *WorkerPool) feedAsync(body interface{}) {
 	wp.Add(1)
 
 	wp.jobmu.Lock()
 	defer wp.jobmu.Unlock()
 	wp.jobq.PushBack(body)
+}
+
+func (wp *WorkerPool) feedSync(body interface{}) {
+	wp.Add(1)
+	payload := &Payload{
+		Body: body,
+		Try:  0,
+	}
+
+	wp.jobch <- payload
 }
 
 func (wp *WorkerPool) feedRoutine() {
