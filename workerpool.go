@@ -182,6 +182,11 @@ func New(jobfnc JobFnc, opts ...OptFunc) (*WorkerPool, error) {
 	return wp, nil
 }
 
+// Responses returns Response channel containing all Job returned values
+func (wp *WorkerPool) Responses() chan Response {
+	return wp.ReturnChannel
+}
+
 // VelocityValues returns map of recorded velocity for each used velocity percentil
 func (wp *WorkerPool) VelocityValues() map[int]float64 {
 	c := make(map[int]float64)
