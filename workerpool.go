@@ -168,7 +168,11 @@ func New(jobfnc JobFnc, opts ...OptFunc) (*WorkerPool, error) {
 	}
 
 	wp.ReturnChannel = make(chan Response)
-	wp.jobch = make(chan *Payload, wp.MaxWorker)
+	if wp.MaxQueue > 0 {
+		wp.jobch = make(chan *Payload, wp.MaxQueue)
+	} else {
+		wp.jobch = make(chan *Payload, wp.MaxWorker)
+	}
 
 	// spawn the first size worker
 	wp.setsize(0)
