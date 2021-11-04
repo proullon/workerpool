@@ -84,6 +84,7 @@ type WorkerPool struct {
 	wanted int
 
 	velocity  map[int]float64
+	avg_sum   map[int]float64
 	ops       map[int]int
 	sizeindex int
 
@@ -92,6 +93,14 @@ type WorkerPool struct {
 
 	sync.WaitGroup
 	mu sync.RWMutex
+}
+
+// Velocity information for each sizing
+// rps describe the number of operation per second
+// avg describe the average duration of operation
+type Velocity struct {
+	Ops float64
+	Avg float64
 }
 
 // WithRetry instructs new WorkerPool to
@@ -157,6 +166,7 @@ func New(jobfnc JobFnc, opts ...OptFunc) (*WorkerPool, error) {
 		EvaluationTime: 5,
 		ops:            make(map[int]int),
 		velocity:       make(map[int]float64),
+		avg_sum:        make(map[int]float64),
 		responses:      list.New(),
 		jobq:           list.New(),
 		status:         Running,
@@ -192,24 +202,28 @@ func (wp *WorkerPool) Responses() chan Response {
 }
 
 // VelocityValues returns map of recorded velocity for each used velocity percentil
-func (wp *WorkerPool) VelocityValues() map[int]float64 {
-	c := make(map[int]float64)
+func (wp *WorkerPool) VelocityValues() map[int]Velocity {
+	c := make(map[int]Velocity)
 	wp.mu.RLock()
 	for k, v := range wp.velocity {
-		c[k] = v
+		c[k] = Velocity{
+			Ops: v,
+			Avg: wp.avg_sum[k] / float64(wp.ops[k]),
+		}
 	}
 	wp.mu.RUnlock()
 	return c
 }
 
-func (wp *WorkerPool) CurrentVelocityValues() (int, float64) {
+func (wp *WorkerPool) CurrentVelocityValues() (percentil int, velocity float64, average float64) {
 	i := wp.index()
 	wp.mu.RLock()
-	p := wp.SizePercentil[i]
-	v := wp.velocity[wp.SizePercentil[i]]
+	percentil = wp.SizePercentil[i]
+	velocity = wp.velocity[wp.SizePercentil[i]]
+	average = wp.avg_sum[wp.SizePercentil[i]] / float64(wp.ops[wp.SizePercentil[i]])
 	wp.mu.RUnlock()
 
-	return p, v
+	return percentil, velocity, average
 }
 
 // Stop WorkerPool. All worker goroutine will exit, but stacked responses can still be consumed
@@ -368,7 +382,7 @@ func (wp *WorkerPool) worker() {
 		begin := time.Now()
 		body, err = wp.Job(p.Body)
 		t := time.Since(begin)
-		wp.tick()
+		wp.tick(t)
 
 		if body != nil || (err != nil && p.Try == wp.Retry) {
 			wp.pushResponse(Response{
@@ -398,11 +412,11 @@ func (wp *WorkerPool) isStopped() bool {
 	return stopped
 }
 
-func (wp *WorkerPool) tick() {
+func (wp *WorkerPool) tick(d time.Duration) {
 	wp.mu.Lock()
-	defer wp.mu.Unlock()
-
 	wp.ops[wp.SizePercentil[wp.sizeindex]]++
+	wp.avg_sum[wp.SizePercentil[wp.sizeindex]] += float64(d.Milliseconds())
+	wp.mu.Unlock()
 }
 
 func (wp *WorkerPool) velocityRoutine() {
@@ -413,6 +427,7 @@ func (wp *WorkerPool) velocityRoutine() {
 
 		wp.mu.Lock()
 		wp.ops[wp.SizePercentil[wp.sizeindex]] = 0
+		wp.avg_sum[wp.SizePercentil[wp.sizeindex]] = 0
 		wp.mu.Unlock()
 
 		time.Sleep(time.Duration(wp.EvaluationTime) * time.Second)
