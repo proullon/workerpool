@@ -10,6 +10,8 @@ import (
 type Job struct {
 }
 
+const e = 5
+
 func (j *Job) execute(p interface{}) (interface{}, error) {
 	payload := p.(int)
 	f := func(p int) (int, error) {
@@ -68,16 +70,19 @@ func TestWorkerPool(t *testing.T) {
 		if !ok {
 			continue
 		}
-		t.Logf("%d%% -> %f op/s", i, velocity)
-		if velocity < previous {
-			t.Errorf("Expected velocity to increase steadily, got %f with previous %f", velocity, previous)
+		t.Logf("%d%% -> %f op/s (avg: %.2fms)", i, velocity.Ops, velocity.Avg)
+		if velocity.Ops < previous {
+			t.Errorf("Expected velocity to increase steadily, got %f with previous %f", velocity.Ops, previous)
 		}
-		previous = velocity
+		previous = velocity.Ops
+		if velocity.Avg < 100-e || velocity.Avg > 100+e {
+			t.Errorf("Expected average to be 100ms got %.2fms", velocity.Avg)
+		}
 	}
 
 	// check current velocity
-	percentil, ops := wp.CurrentVelocityValues()
-	t.Logf("Current velocity: %d%% -> %f op/s\n", percentil, ops)
+	percentil, ops, avg := wp.CurrentVelocityValues()
+	t.Logf("Current velocity: %d%% -> %f op/s (avg: %.2fms)\n", percentil, ops, avg)
 	if percentil != 100 {
 		t.Errorf("Expected use of full size, got %d%%", percentil)
 	}
@@ -161,8 +166,8 @@ func TestAllIn(t *testing.T) {
 	wp.Stop()
 
 	// check current velocity
-	percentil, ops := wp.CurrentVelocityValues()
-	t.Logf("Current velocity: %d%% -> %f op/s\n", percentil, ops)
+	percentil, ops, avg := wp.CurrentVelocityValues()
+	t.Logf("Current velocity: %d%% -> %f op/s (avg: %.2fms)\n", percentil, ops, avg)
 	if percentil != 100 {
 		t.Errorf("Expected use of full size, got %d%%", percentil)
 	}
@@ -206,11 +211,14 @@ func TestSlow(t *testing.T) {
 		if !ok {
 			continue
 		}
-		t.Logf("%d%% -> %f op/s", i, velocity)
-		if velocity < previous {
-			t.Errorf("Expected velocity to increase steadily, got %f with previous %f", velocity, previous)
+		t.Logf("%d%% -> %f op/s (avg: %.2fms)", i, velocity.Ops, velocity.Avg)
+		if velocity.Ops < previous {
+			t.Errorf("Expected velocity to increase steadily, got %f with previous %f", velocity.Ops, previous)
 		}
-		previous = velocity
+		previous = velocity.Ops
+		if velocity.Avg < 3000-e || velocity.Avg > 3000+e {
+			t.Errorf("Expected average to be 3000ms got %.2fms", velocity.Avg)
+		}
 	}
 
 }
