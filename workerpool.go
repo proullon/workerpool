@@ -35,8 +35,9 @@ type Response struct {
 // Payload contains actual payload push via Feed()
 // and metadata like try number
 type Payload struct {
-	Body interface{}
-	Try  int
+	Body         interface{}
+	Try          int
+	ResponseChan chan Response
 }
 
 type Status string
@@ -254,6 +255,24 @@ func (wp *WorkerPool) Status() Status {
 	return st
 }
 
+// Exec job with direct response and blocking until response is received
+// Usefull for ratelimiting execution
+func (wp *WorkerPool) Exec(body interface{}) (response interface{}, err error) {
+	ch := make(chan Response)
+
+	wp.Add(1)
+	payload := &Payload{
+		Body:         body,
+		Try:          0,
+		ResponseChan: ch,
+	}
+
+	wp.jobch <- payload
+
+	resp := <-ch
+	return resp.Body, resp.Err
+}
+
 // Feed payload to worker
 func (wp *WorkerPool) Feed(body interface{}) {
 	if wp.MaxQueue > 0 {
@@ -385,10 +404,15 @@ func (wp *WorkerPool) worker() {
 		wp.tick(t)
 
 		if body != nil || (err != nil && p.Try == wp.Retry) {
-			wp.pushResponse(Response{
+			r := Response{
 				Body: body,
 				Err:  err,
-			})
+			}
+			if p.ResponseChan != nil {
+				p.ResponseChan <- r
+			} else {
+				wp.pushResponse(r)
+			}
 		}
 
 		// maybe retry

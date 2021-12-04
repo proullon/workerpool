@@ -307,3 +307,41 @@ func TestMaxQueue(t *testing.T) {
 	// stop workerpool
 	wp.Stop()
 }
+
+func TestExec(t *testing.T) {
+
+	job := &Job{}
+
+	wp, err := New(job.execute,
+		WithMaxWorker(1500),
+		WithEvaluationTime(1),
+		WithSizePercentil(AllInSizesPercentil),
+	)
+
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+
+	for i := 0; i < 1000; i++ {
+		go func(i int) {
+			begin := time.Now()
+			resp, err := wp.Exec(i)
+			if err != nil {
+				t.Errorf("Unexpected error: %s", err)
+				return
+			}
+			if resp.(int) != 2*i {
+				t.Errorf("Expected i = %d, got %d", 2*i, resp.(int))
+				return
+			}
+			d := time.Since(begin)
+			if d > (100+e)*time.Millisecond || d < (100-e)*time.Millisecond {
+				t.Errorf("Expected Exec of 100ms, got %s", d)
+			}
+		}(i)
+	}
+
+	wp.Feed(0)
+	wp.Wait()
+	wp.Stop()
+}
