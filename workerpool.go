@@ -94,6 +94,8 @@ type WorkerPool struct {
 
 	sync.WaitGroup
 	mu sync.RWMutex
+
+	quorum *Quorum
 }
 
 // Velocity information for each sizing
@@ -178,6 +180,13 @@ func New(jobfnc JobFnc, opts ...OptFunc) (*WorkerPool, error) {
 		fn(wp)
 	}
 
+	if wp.quorum != nil {
+		err := wp.quorum.Start()
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	wp.ReturnChannel = make(chan Response)
 	if wp.MaxQueue > 0 {
 		wp.jobch = make(chan *Payload, wp.MaxQueue)
@@ -233,6 +242,9 @@ func (wp *WorkerPool) Stop() {
 	defer wp.mu.Unlock()
 	wp.stopped = true
 	wp.status = Stopped
+	if wp.quorum != nil {
+		wp.quorum.Stop()
+	}
 }
 
 // Pause all workers with killing them
