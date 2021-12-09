@@ -147,7 +147,7 @@ func TestAllIn(t *testing.T) {
 
 	job := &Job{}
 	wp, err := New(job.execute,
-		WithMaxWorker(1000),
+		WithMaxWorker(100),
 		WithEvaluationTime(1),
 		WithSizePercentil(AllInSizesPercentil),
 	)
@@ -156,7 +156,7 @@ func TestAllIn(t *testing.T) {
 		t.Errorf(err.Error())
 	}
 
-	for i := 0; i < 100000; i++ {
+	for i := 0; i < 10000; i++ {
 		wp.Feed(i)
 	}
 
@@ -171,8 +171,8 @@ func TestAllIn(t *testing.T) {
 	if percentil != 100 {
 		t.Errorf("Expected use of full size, got %d%%", percentil)
 	}
-	if ops < 9500 {
-		t.Errorf("Expected around 10000 op/s with 1000 worker doing 10 op/s each, got %f", ops)
+	if ops < 950 {
+		t.Errorf("Expected around 1000 op/s with 100 worker doing 10 op/s each, got %f", ops)
 	}
 }
 
@@ -313,7 +313,7 @@ func TestExec(t *testing.T) {
 	job := &Job{}
 
 	wp, err := New(job.execute,
-		WithMaxWorker(1500),
+		WithMaxWorker(150),
 		WithEvaluationTime(1),
 		WithSizePercentil(AllInSizesPercentil),
 	)
@@ -322,7 +322,7 @@ func TestExec(t *testing.T) {
 		t.Errorf(err.Error())
 	}
 
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 100; i++ {
 		go func(i int) {
 			begin := time.Now()
 			resp, err := wp.Exec(i)

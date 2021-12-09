@@ -5,6 +5,8 @@ import (
 	"runtime"
 	"sync"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 var (
@@ -181,7 +183,7 @@ func New(jobfnc JobFnc, opts ...OptFunc) (*WorkerPool, error) {
 	}
 
 	if wp.quorum != nil {
-		err := wp.quorum.Start()
+		err := wp.quorum.Start(wp.MaxWorker)
 		if err != nil {
 			return nil, err
 		}
@@ -265,6 +267,14 @@ func (wp *WorkerPool) Status() Status {
 	st := wp.status
 	wp.mu.RUnlock()
 	return st
+}
+
+// Active returns the number of active goroutines
+func (wp *WorkerPool) Active() int {
+	wp.mu.RLock()
+	a := wp.active
+	wp.mu.RUnlock()
+	return a
 }
 
 // Exec job with direct response and blocking until response is received
@@ -470,6 +480,11 @@ func (wp *WorkerPool) velocityRoutine() {
 
 		i := wp.index()
 
+		if wp.quorum != nil {
+			wp.MaxWorker = wp.quorum.MaxInstanceWorker()
+			wp.setsize(i)
+		}
+
 		wp.mu.Lock()
 		wp.velocity[wp.SizePercentil[i]] = float64(wp.ops[wp.SizePercentil[i]]) / float64(wp.EvaluationTime)
 		wp.mu.Unlock()
@@ -505,16 +520,21 @@ func (wp *WorkerPool) velocityRoutine() {
 
 func (wp *WorkerPool) setsize(i int) {
 	wp.mu.Lock()
-	defer wp.mu.Unlock()
 
 	wp.sizeindex = i
-	wp.wanted = int(wp.MaxWorker / 100 * wp.SizePercentil[i])
+	wp.wanted = int(wp.MaxWorker * wp.SizePercentil[i] / 100)
 	if wp.wanted == 0 {
 		wp.wanted++
 	}
 
-	if wp.active < wp.wanted {
-		for i := wp.active; i < wp.wanted; i++ {
+	log.Debugf("MaxWorker: %d, SizePercentil: %d, Wanted: %d, Active: %d\n", wp.MaxWorker, wp.SizePercentil[i], wp.wanted, wp.active)
+	active := wp.active
+	wanted := wp.wanted
+
+	defer wp.mu.Unlock()
+
+	if active < wanted {
+		for i := active; i < wanted; i++ {
 			wp.spawn()
 		}
 	}

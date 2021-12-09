@@ -57,8 +57,10 @@ type Quorum struct {
 	Bind             string
 	DSNs             []string
 	MaxWorker        int
+	LocalMaxWorker   int
 	SharingThreshold int
 
+	listener  net.Listener
 	instances map[string]*Instance
 	m         sync.Mutex
 }
@@ -101,11 +103,24 @@ func (q *Quorum) InstanceCount() int {
 	return c
 }
 
+func (q *Quorum) MaxInstanceWorker() int {
+	q.m.Lock()
+	defer q.m.Unlock()
+	max := q.MaxWorker / (len(q.instances) + 1)
+	if q.LocalMaxWorker < max {
+		return q.LocalMaxWorker
+	}
+	return max
+}
+
 // Start starts:
 // - routine trying to connect to all other members of quorum
 // - routine listening for new connection from other quorum instances
-func (q *Quorum) Start() error {
+func (q *Quorum) Start(localMax int) error {
+	q.m.Lock()
 	q.Status = Running
+	q.LocalMaxWorker = localMax
+	q.m.Unlock()
 
 	go q.connectionRoutine()
 
@@ -113,16 +128,24 @@ func (q *Quorum) Start() error {
 	if err != nil {
 		return fmt.Errorf("cannot listen: %s", err)
 	}
+	q.m.Lock()
+	q.listener = ln
+	q.m.Unlock()
 
 	go func() {
 		for q.Status == Running {
 			conn, err := ln.Accept()
-			if err != nil {
-				// handle error
+			if err != nil && err == net.ErrClosed {
+				return
 			}
 			if q.Status != Running {
-				conn.Close()
+				if conn != nil {
+					conn.Close()
+				}
 				return
+			}
+			if err != nil {
+				q.debug("cannot accept new conn: %s", err)
 			}
 			go q.instanceRoutine(conn)
 		}
@@ -133,7 +156,10 @@ func (q *Quorum) Start() error {
 
 // Stop all routines and close connections to other instances in quorum
 func (q *Quorum) Stop() error {
+	q.m.Lock()
+	defer q.m.Unlock()
 	q.Status = Stopped
+	q.listener.Close()
 	for _, inst := range q.instances {
 		inst.ReadConn.Close()
 		inst.WriteConn.Close()
@@ -194,6 +220,8 @@ func (q *Quorum) instanceRoutine(conn net.Conn) {
 	err := dec.Decode(&cmsg)
 	if err != nil {
 		log.Errorf("Cannot decode connect message: %s", err)
+		conn.Close()
+		return
 	}
 	q.debug("Received CONNECT: %+v", cmsg)
 
@@ -227,7 +255,10 @@ func (q *Quorum) instanceRoutine(conn net.Conn) {
 	var msg interface{}
 	for q.Status == Running {
 		err := dec.Decode(&msg)
-		if err != nil && err == io.EOF {
+		if q.Status != Running {
+			return
+		}
+		if err != nil && (err == io.EOF || err == net.ErrClosed) {
 			q.debug("Instance %+v disconnected", inst)
 			inst.ReadConn.Close()
 			inst.WriteConn.Close()
@@ -272,7 +303,7 @@ func (q *Quorum) Connect(inst *Instance) error {
 
 func (q *Quorum) debug(format string, vars ...interface{}) {
 	d := fmt.Sprintf(format, vars...)
-	fmt.Printf("[DEBUG <%s>] %s\n", q.Name, d)
+	log.Debugf("[DEBUG <%s>] %s\n", q.Name, d)
 }
 
 func (q *Quorum) removeInstance(inst *Instance) {
