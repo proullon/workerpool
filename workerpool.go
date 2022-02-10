@@ -73,6 +73,11 @@ type WorkerPool struct {
 	// Retry will fead again payload N times on failure
 	// returning error only on last fail
 	Retry int
+	// KillRoutineOnError will exit goroutine if job end with error
+	KillRoutineOnError bool
+	// KillRoutineOnMaxDuration will exit goroutine if job end after max duration
+	KillRoutineOnMaxDuration bool
+
 	// MaxQueue limits the number of items in the queue.
 	// 0 is unlimited, using list.List
 	MaxQueue int
@@ -157,6 +162,24 @@ func WithMaxDuration(d time.Duration) OptFunc {
 func WithMaxQueue(max int) OptFunc {
 	fn := func(wp *WorkerPool) {
 		wp.MaxQueue = max
+	}
+	return fn
+}
+
+// WithKillRoutineOnError will exit routine if job ends on error,
+// forcing slow down before next evaluation
+func WithKillRoutineOnError(b bool) OptFunc {
+	fn := func(wp *WorkerPool) {
+		wp.KillRoutineOnError = b
+	}
+	return fn
+}
+
+// WithKillRoutineOnMaxDuration will exit routine if job ends after max duration,
+// forcing slow down before next evaluation
+func WithKillRoutineOnMaxDuration(b bool) OptFunc {
+	fn := func(wp *WorkerPool) {
+		wp.KillRoutineOnMaxDuration = b
 	}
 	return fn
 }
@@ -372,11 +395,11 @@ func (wp *WorkerPool) index() int {
 }
 
 func (wp *WorkerPool) evaluate(d time.Duration, err error) bool {
-	if err != nil {
+	if wp.KillRoutineOnError && err != nil {
 		return wp.exit()
 	}
 
-	if d > wp.MaxDuration*time.Second {
+	if wp.KillRoutineOnMaxDuration && d > wp.MaxDuration*time.Second {
 		return wp.exit()
 	}
 
