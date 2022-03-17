@@ -16,6 +16,7 @@ func (j *Job) execute(p interface{}) (interface{}, error) {
 	payload := p.(int)
 	f := func(p int) (int, error) {
 		time.Sleep(100 * time.Millisecond)
+		//		fmt.Printf("%d*2 = %d\n", p, p*2)
 		return p * 2, nil
 	}
 	return f(payload)
@@ -42,7 +43,7 @@ func TestWorkerPool(t *testing.T) {
 	job := &Job{}
 
 	wp, err := New(job.execute,
-		WithMaxWorker(1000),
+		WithMaxWorker(100),
 		WithEvaluationTime(1),
 	)
 
@@ -50,7 +51,7 @@ func TestWorkerPool(t *testing.T) {
 		t.Errorf(err.Error())
 	}
 
-	for i := 0; i < 100000; i++ {
+	for i := 0; i < 10000; i++ {
 		wp.Feed(i)
 	}
 
@@ -86,8 +87,8 @@ func TestWorkerPool(t *testing.T) {
 	if percentil != 100 {
 		t.Errorf("Expected use of full size, got %d%%", percentil)
 	}
-	if ops < 9500 {
-		t.Errorf("Expected around 10000 op/s with 1000 worker doing 10 op/s each, got %f", ops)
+	if ops < 950 {
+		t.Errorf("Expected around 1000 op/s with 100 worker doing 10 op/s each, got %f", ops)
 	}
 
 }
@@ -185,7 +186,7 @@ func TestSlow(t *testing.T) {
 
 	wp, err := New(job.slow,
 		WithMaxWorker(100),
-		WithEvaluationTime(5),
+		WithEvaluationTime(10),
 		WithSizePercentil(AllSizesPercentil),
 	)
 
@@ -341,7 +342,6 @@ func TestExec(t *testing.T) {
 		}(i)
 	}
 
-	wp.Feed(0)
-	wp.Wait()
+	time.Sleep(3 * time.Second)
 	wp.Stop()
 }

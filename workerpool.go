@@ -206,14 +206,14 @@ func New(jobfnc JobFnc, opts ...OptFunc) (*WorkerPool, error) {
 	}
 
 	if wp.quorum != nil {
-		err := wp.quorum.Start(wp.MaxWorker)
+		err := wp.quorum.Start(wp.MaxWorker, wp)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	wp.ReturnChannel = make(chan Response)
-	if wp.MaxQueue > 0 {
+	if wp.MaxQueue > 0 && wp.quorum == nil {
 		wp.jobch = make(chan *Payload, wp.MaxQueue)
 	} else {
 		wp.jobch = make(chan *Payload, wp.MaxWorker)
@@ -224,8 +224,9 @@ func New(jobfnc JobFnc, opts ...OptFunc) (*WorkerPool, error) {
 	// start velocity routine
 	go wp.velocityRoutine()
 	go wp.responseRoutine()
-	if wp.MaxQueue == 0 {
+	if wp.MaxQueue == 0 || wp.quorum != nil {
 		go wp.feedRoutine()
+		go wp.shareRoutine()
 	}
 
 	return wp, nil
@@ -259,6 +260,20 @@ func (wp *WorkerPool) CurrentVelocityValues() (percentil int, velocity float64, 
 	wp.mu.RUnlock()
 
 	return percentil, velocity, average
+}
+
+func (wp *WorkerPool) GlobalVelocityValues() (map[int]Velocity, map[string]*Instance) {
+
+	// Return same format even if quorum is not enabled
+	if wp.quorum == nil {
+		all := make(map[string]*Instance)
+		local := wp.VelocityValues()
+		i := &Instance{Name: "local", Velocity: local}
+		all["local"] = i
+		return local, all
+	}
+
+	return wp.quorum.GlobalVelocityValues()
 }
 
 // Stop WorkerPool. All worker goroutine will exit, but stacked responses can still be consumed
@@ -320,7 +335,7 @@ func (wp *WorkerPool) Exec(body interface{}) (response interface{}, err error) {
 
 // Feed payload to worker
 func (wp *WorkerPool) Feed(body interface{}) {
-	if wp.MaxQueue > 0 {
+	if wp.MaxQueue > 0 && wp.quorum == nil {
 		wp.feedSync(body)
 	} else {
 		wp.feedAsync(body)
@@ -345,6 +360,76 @@ func (wp *WorkerPool) feedSync(body interface{}) {
 	wp.jobch <- payload
 }
 
+func (wp *WorkerPool) canAcceptTasks(tasks []Payload) bool {
+	wp.jobmu.Lock()
+	n := wp.jobq.Len()
+	wp.jobmu.Unlock()
+
+	if n < wp.MaxWorker {
+		return true
+	}
+
+	// TODO: Add call to user defined callback to help accept or not specific tasks
+
+	return false
+}
+
+func (wp *WorkerPool) shareRoutine() {
+	if wp.quorum == nil {
+		return
+	}
+	for {
+		if wp.isStopped() {
+			return
+		}
+
+		// nothing to do, yay zZzZzZ
+		//if n == 0 {
+		time.Sleep(10 * time.Millisecond)
+		//		continue
+		//}
+
+		// can we share the load ?
+
+		/*
+			if wp.quorum != nil {
+				shared := wp.quorum.SharedTasks()
+				instances := wp.quorum.InstancesConnected()
+				log.Infof("%d > 3*%d && %d <= %d\n", n, wp.MaxWorker, shared, instances)
+			}
+		*/
+		wp.jobmu.Lock()
+		n := wp.jobq.Len()
+		//shared := wp.quorum.SharedTasks()
+		//instances := wp.quorum.InstancesConnected()
+		//log.Infof("%d > 3*%d && %d <= %d\n", n, wp.MaxWorker, shared, instances)
+		qsize := wp.quorum.InstancesConnected()
+		if wp.quorum != nil && n > 3*wp.MaxWorker && qsize > 1 && wp.quorum.SharedTasks() <= (qsize*10) {
+			// If we have a quorum
+			// and local queue greater than 3 times the max number of worker
+			// qsize if more than 1
+			// and there is less than 3 tasks bundle shared per instance connected
+			// then yes
+
+			// share MAX_WORKER last in the queue
+			var tasks []Payload
+			for i := 0; i < wp.MaxWorker; i++ {
+				e := wp.jobq.Back()
+				body := e.Value
+				p := Payload{
+					Body: body,
+					Try:  0,
+				}
+				wp.jobq.Remove(e)
+				tasks = append(tasks, p)
+			}
+			//log.Warnf("Set %d tasks to be shared", len(tasks))
+			wp.quorum.ShareTasks(tasks, wp)
+		}
+		wp.jobmu.Unlock()
+	}
+}
+
 func (wp *WorkerPool) feedRoutine() {
 	for {
 		if wp.isStopped() {
@@ -356,11 +441,13 @@ func (wp *WorkerPool) feedRoutine() {
 		n := wp.jobq.Len()
 		wp.jobmu.Unlock()
 
+		// nothing to do, yay zZzZzZ
 		if n == 0 {
-			time.Sleep(1 * time.Millisecond)
+			time.Sleep(10 * time.Millisecond)
 			continue
 		}
 
+		// Feed jobch
 		wp.jobmu.Lock()
 		e := wp.jobq.Front()
 		body := e.Value
@@ -376,6 +463,41 @@ func (wp *WorkerPool) feedRoutine() {
 		wp.jobmu.Lock()
 		wp.jobq.Remove(e)
 		wp.jobmu.Unlock()
+
+		// can we share the load ?
+
+		/*
+			if wp.quorum != nil {
+				shared := wp.quorum.SharedTasks()
+				instances := wp.quorum.InstancesConnected()
+				log.Infof("%d > 3*%d && %d <= %d\n", n, wp.MaxWorker, shared, instances)
+			}
+		*/
+		/*
+			if wp.quorum != nil && n > 3*wp.MaxWorker && wp.quorum.SharedTasks() <= wp.quorum.InstancesConnected() {
+				// If we have a quorum
+				// and local queue greater than 3 times the max number of worker
+				// and there is less than 3 tasks bundle shared
+				// then yes
+
+				// share MAX_WORKER last in the queue
+				var tasks []Payload
+				wp.jobmu.Lock()
+				for i := 0; i < wp.MaxWorker; i++ {
+					e := wp.jobq.Back()
+					body := e.Value
+					p := Payload{
+						Body: body,
+						Try:  0,
+					}
+					wp.jobq.Remove(e)
+					tasks = append(tasks, p)
+				}
+				wp.jobmu.Unlock()
+				log.Warnf("Set %d tasks to be shared", len(tasks))
+				wp.quorum.ShareTasks(tasks, wp)
+			}
+		*/
 	}
 }
 
@@ -509,6 +631,7 @@ func (wp *WorkerPool) velocityRoutine() {
 		}
 
 		wp.mu.Lock()
+		//		log.Infof("Setting velocity for %d%% (%.2f)", wp.SizePercentil[i], float64(wp.ops[wp.SizePercentil[i]])/float64(wp.EvaluationTime))
 		wp.velocity[wp.SizePercentil[i]] = float64(wp.ops[wp.SizePercentil[i]]) / float64(wp.EvaluationTime)
 		wp.mu.Unlock()
 
