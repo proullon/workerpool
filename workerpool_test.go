@@ -10,7 +10,7 @@ import (
 type Job struct {
 }
 
-const e = 5
+const e = 40
 
 func (j *Job) execute(p interface{}) (interface{}, error) {
 	payload := p.(int)
@@ -43,7 +43,7 @@ func TestWorkerPool(t *testing.T) {
 	job := &Job{}
 
 	wp, err := New(job.execute,
-		WithMaxWorker(100),
+		WithMaxWorker(10),
 		WithEvaluationTime(1),
 	)
 
@@ -51,7 +51,7 @@ func TestWorkerPool(t *testing.T) {
 		t.Errorf(err.Error())
 	}
 
-	for i := 0; i < 10000; i++ {
+	for i := 0; i < 1000; i++ {
 		wp.Feed(i)
 	}
 
@@ -87,8 +87,8 @@ func TestWorkerPool(t *testing.T) {
 	if percentil != 100 {
 		t.Errorf("Expected use of full size, got %d%%", percentil)
 	}
-	if ops < 950 {
-		t.Errorf("Expected around 1000 op/s with 100 worker doing 10 op/s each, got %f", ops)
+	if ops < 100-e || ops > 100+e {
+		t.Errorf("Expected around 100 op/s with 10 worker doing 10 op/s each, got %f", ops)
 	}
 
 }
@@ -148,7 +148,7 @@ func TestAllIn(t *testing.T) {
 
 	job := &Job{}
 	wp, err := New(job.execute,
-		WithMaxWorker(100),
+		WithMaxWorker(10),
 		WithEvaluationTime(1),
 		WithSizePercentil(AllInSizesPercentil),
 	)
@@ -157,7 +157,7 @@ func TestAllIn(t *testing.T) {
 		t.Errorf(err.Error())
 	}
 
-	for i := 0; i < 10000; i++ {
+	for i := 0; i < 1000; i++ {
 		wp.Feed(i)
 	}
 
@@ -172,8 +172,8 @@ func TestAllIn(t *testing.T) {
 	if percentil != 100 {
 		t.Errorf("Expected use of full size, got %d%%", percentil)
 	}
-	if ops < 950 {
-		t.Errorf("Expected around 1000 op/s with 100 worker doing 10 op/s each, got %f", ops)
+	if ops < 100-e || ops > 100+e {
+		t.Errorf("Expected around 100 op/s with 10 worker doing 10 op/s each, got %f", ops)
 	}
 }
 
@@ -314,7 +314,7 @@ func TestExec(t *testing.T) {
 	job := &Job{}
 
 	wp, err := New(job.execute,
-		WithMaxWorker(150),
+		WithMaxWorker(15),
 		WithEvaluationTime(1),
 		WithSizePercentil(AllInSizesPercentil),
 	)
@@ -323,7 +323,7 @@ func TestExec(t *testing.T) {
 		t.Errorf(err.Error())
 	}
 
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 10; i++ {
 		go func(i int) {
 			begin := time.Now()
 			resp, err := wp.Exec(i)

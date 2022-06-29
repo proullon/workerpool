@@ -287,7 +287,7 @@ func (wp *WorkerPool) Stop() {
 	}
 }
 
-// Pause all workers with killing them
+// Pause all workers without killing them
 func (wp *WorkerPool) Pause() {
 	wp.mu.Lock()
 	wp.status = Paused
@@ -313,6 +313,22 @@ func (wp *WorkerPool) Active() int {
 	a := wp.active
 	wp.mu.RUnlock()
 	return a
+}
+
+// InQueue returns number of tasks in queue if:
+// - using unlimited queue (MaxQueue = 0)
+// - using quorum
+//
+// Otherwise returns 0
+func (wp *WorkerPool) InQueue() int {
+	if wp.jobq == nil {
+		return 0
+	}
+
+	wp.jobmu.Lock()
+	n := wp.jobq.Len()
+	wp.jobmu.Unlock()
+	return n
 }
 
 // Exec job with direct response and blocking until response is received
