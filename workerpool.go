@@ -586,7 +586,7 @@ func (wp *WorkerPool) worker() {
 		t := time.Since(begin)
 		wp.tick(t)
 
-		if body != nil || (err != nil && p.Try == wp.Retry) {
+		if body != nil || p.ResponseChan != nil || (err != nil && p.Try == wp.Retry) {
 			r := Response{
 				Body: body,
 				Err:  err,
