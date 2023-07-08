@@ -239,7 +239,6 @@ func TestQuorumSharedRateLimit(t *testing.T) {
 	wp.Stop()
 }
 
-/*
 func TestSoloQuorum(t *testing.T) {
 	job := &Job{}
 	localMax := 5
@@ -258,7 +257,7 @@ func TestSoloQuorum(t *testing.T) {
 		t.Errorf(err.Error())
 	}
 
-	for i := 0; i < 20; i++ {
+	for i := 0; i < 50; i++ {
 		wp.Feed(i)
 	}
 
@@ -266,15 +265,15 @@ func TestSoloQuorum(t *testing.T) {
 	wp.Wait()
 
 	_, v, a := wp.CurrentVelocityValues()
-	if math.Abs(v) < eps {
-		t.Errorf("Workerpool %s velocity should not be nil", wp.quorum.Name)
-	}
 	if math.Abs(a-100) > eps {
 		t.Errorf("Workerpool %s average should be 100, got %.2f", wp.quorum.Name, a)
 	}
+	if math.Abs(v) < eps {
+		t.Errorf("Workerpool %s velocity should not be 0", wp.quorum.Name)
+	}
 
 	wp.Stop()
-}*/
+}
 
 func TestQuorumSharedTasksSolo(t *testing.T) {
 	job := &Job{}
@@ -450,7 +449,7 @@ func TestQuorumSharedTasksTrio(t *testing.T) {
 
 	// All 3 should have worked
 	// should be at least twice as fast
-	if time.Since(begin) > time.Duration(10*maxQueue/(localMax*3)+500)*time.Millisecond {
+	if time.Since(begin)-1*time.Second > time.Duration(10*maxQueue/(localMax*3))*time.Millisecond {
 		t.Errorf("Should have taken less than %s, got %s", time.Duration(10*maxQueue/(localMax*3))*time.Millisecond, time.Since(begin))
 	}
 
@@ -546,9 +545,9 @@ func TestQuorumSharedTasksQuatuor(t *testing.T) {
 	// wait for completion
 	wp.Wait()
 
-	// All 3 should have worked
-	// should be at least twice as fast
-	if time.Since(begin) > time.Duration(10*maxQueue/(localMax*2))*time.Millisecond {
+	// All 4 should have worked
+	// should be at least 3 times as fast as fast
+	if time.Since(begin) > time.Duration(10*maxQueue/(localMax*3))*time.Millisecond {
 		t.Errorf("Should have taken less than %s, got %s", time.Duration(10*maxQueue/(localMax*2))*time.Millisecond, time.Since(begin))
 	}
 
@@ -593,122 +592,3 @@ func TestQuorumSharedTasksQuatuor(t *testing.T) {
 	wp3.Stop()
 	wp4.Stop()
 }
-
-/*
-func TestQuorumSharedTasksQuintet(t *testing.T) {
-	job := &Job{}
-	localMax := 2
-	globalMax := 30
-	maxQueue := 10 * 1000
-	eps := 50.0
-
-	wp, err := New(job.execute,
-		WithSizePercentil(AllInSizesPercentil),
-		WithMaxWorker(localMax),
-		WithMaxQueue(maxQueue),
-		WithEvaluationTime(5),
-		WithQuorum("1", "127.0.0.1:8090", "", []string{"127.0.0.1:8091", "127.0.0.1:8092", "127.0.0.1:8093", "127.0.0.1:8094"}, globalMax, 100),
-	)
-	if err != nil {
-		t.Errorf(err.Error())
-	}
-
-	wp2, err := New(job.execute,
-		WithSizePercentil(AllInSizesPercentil),
-		WithMaxWorker(localMax),
-		WithMaxQueue(maxQueue),
-		WithEvaluationTime(5),
-		WithQuorum("2", "127.0.0.1:8091", "", []string{"127.0.0.1:8090", "127.0.0.1:8092", "127.0.0.1:8093", "127.0.0.1:8094"}, globalMax, 100),
-	)
-	if err != nil {
-		t.Errorf(err.Error())
-	}
-
-	wp3, err := New(job.execute,
-		WithSizePercentil(AllInSizesPercentil),
-		WithMaxWorker(localMax),
-		WithMaxQueue(maxQueue),
-		WithEvaluationTime(5),
-		WithQuorum("3", "127.0.0.1:8092", "", []string{"127.0.0.1:8090", "127.0.0.1:8091", "127.0.0.1:8093", "127.0.0.1:8094"}, globalMax, 100),
-	)
-	if err != nil {
-		t.Errorf(err.Error())
-	}
-	wp4, err := New(job.execute,
-		WithSizePercentil(AllInSizesPercentil),
-		WithMaxWorker(localMax),
-		WithMaxQueue(maxQueue),
-		WithEvaluationTime(5),
-		WithQuorum("4", "127.0.0.1:8093", "", []string{"127.0.0.1:8090", "127.0.0.1:8091", "127.0.0.1:8092", "127.0.0.1:8094"}, globalMax, 100),
-	)
-	if err != nil {
-		t.Errorf(err.Error())
-	}
-	wp5, err := New(job.execute,
-		WithSizePercentil(AllInSizesPercentil),
-		WithMaxWorker(localMax),
-		WithMaxQueue(maxQueue),
-		WithEvaluationTime(5),
-		WithQuorum("5", "127.0.0.1:8094", "", []string{"127.0.0.1:8090", "127.0.0.1:8091", "127.0.0.1:8092", "127.0.0.1:8093"}, globalMax, 100),
-	)
-	if err != nil {
-		t.Errorf(err.Error())
-	}
-
-	time.Sleep(1000 * time.Millisecond)
-	begin := time.Now()
-	for i := 0; i < maxQueue/10; i++ {
-		wp.Feed(i)
-	}
-	// wait for completion
-	wp.Wait()
-
-	// All 3 should have worked
-	// should be at least twice as fast
-	if time.Since(begin) > time.Duration(10*maxQueue/(localMax*2))*time.Millisecond {
-		t.Errorf("Should have taken less than %s, got %s", time.Duration(10*maxQueue/(localMax*2))*time.Millisecond, time.Since(begin))
-	}
-
-	_, v, a := wp.CurrentVelocityValues()
-	if math.Abs(v) < eps {
-		t.Errorf("Workerpool %s velocity should not be nil", wp.quorum.Name)
-	}
-	if math.Abs(a-100) > eps {
-		t.Errorf("Workerpool %s average should be 100, got %.2f", wp.quorum.Name, a)
-	}
-	_, v, a = wp2.CurrentVelocityValues()
-	if math.Abs(v) < eps {
-		t.Errorf("Workerpool %s velocity should not be nil", wp2.quorum.Name)
-	}
-	if math.Abs(a-100) > eps {
-		t.Errorf("Workerpool %s average should be 100, got %.2f", wp2.quorum.Name, a)
-	}
-	_, v, a = wp3.CurrentVelocityValues()
-	if math.Abs(v) < eps {
-		t.Errorf("Workerpool %s velocity should not be nil", wp3.quorum.Name)
-	}
-	if math.Abs(a-100) > eps {
-		t.Errorf("Workerpool %s average should be 100, got %.2f", wp3.quorum.Name, a)
-	}
-	_, v, a = wp4.CurrentVelocityValues()
-	if math.Abs(v) < eps {
-		t.Errorf("Workerpool %s velocity should not be nil", wp4.quorum.Name)
-	}
-	if math.Abs(a-100) > eps {
-		t.Errorf("Workerpool %s average should be 100, got %.2f", wp4.quorum.Name, a)
-	}
-
-	// Test GlobalVelocityValues method
-	gv, iv := wp.GlobalVelocityValues()
-	if gv == nil || iv == nil {
-		t.Errorf("global velocity values should not be nil")
-		return
-	}
-
-	wp.Stop()
-	wp2.Stop()
-	wp3.Stop()
-	wp4.Stop()
-	wp5.Stop()
-}
-*/

@@ -34,7 +34,7 @@ func main() {
 		workerpool.WithQuorum("4", "127.0.0.1:8094", "", []string{"127.0.0.1:8090", "127.0.0.1:8091", "127.0.0.1:8092", "127.0.0.1:8095"}, globalMax, 100),
 	)
 	if err != nil {
-		fmt.Errorf("Cannot setup workerpool: %s\n", err)
+		fmt.Printf("Cannot setup workerpool: %s\n", err)
 		return
 	}
 
@@ -46,7 +46,7 @@ func main() {
 		workerpool.WithQuorum("5", "127.0.0.1:8095", "", []string{"127.0.0.1:8090", "127.0.0.1:8091", "127.0.0.1:8092", "127.0.0.1:8094"}, globalMax, 100),
 	)
 	if err != nil {
-		fmt.Errorf("Cannot setup workerpool: %s\n", err)
+		fmt.Printf("Cannot setup workerpool: %s\n", err)
 		return
 	}
 

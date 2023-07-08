@@ -67,7 +67,6 @@ type TaskAcceptance struct {
 	UUID     string
 	Emitter  string
 	Accepter string
-	//Count    int
 }
 
 type TaskAcceptanceAck struct {
@@ -121,37 +120,15 @@ type Quorum struct {
 
 	availableTasks      map[string]TaskAvailable
 	availabilityTimeout time.Duration
-	//pendingAckTasks     *list.List
-	pendingAckTasks   map[string]TaskAvailable
-	acceptedTasks     map[string]*TaskAcceptance
-	awaitingResponses map[string]TaskAvailable
-	executionTimeout  time.Duration
-	wp                *WorkerPool
+	pendingAckTasks     map[string]TaskAvailable
+	acceptedTasks       map[string]*TaskAcceptance
+	awaitingResponses   map[string]TaskAvailable
+	executionTimeout    time.Duration
+	wp                  *WorkerPool
 
 	listener  net.Listener
 	instances map[string]*Instance
 	m         sync.Mutex
-}
-
-func (q *Quorum) internalStatus() {
-	//q.m.Lock()
-	//defer q.m.Unlock()
-
-	/*
-		var c = 1
-		for _, inst := range q.instances {
-			if inst.WriteConn != nil && inst.ReadConn != nil {
-				c++
-			}
-		}
-			log.Infof("[STATUS <%s>] Quorum:%d, Available:%d, PendingAck:%d, Accepted:%d, AwaitingResults:%d", q.Name,
-				c,
-				len(q.availableTasks),
-				len(q.pendingAckTasks),
-				len(q.acceptedTasks),
-				len(q.awaitingResponses),
-			)
-	*/
 }
 
 // Instance describe other instances in the quorum
@@ -321,13 +298,11 @@ func (q *Quorum) tasksRoutine() {
 func (q *Quorum) cleanupTimedOutAvailableTasks() {
 	q.m.Lock()
 
-	//	log.Infof("%d availableTasks", len(q.availableTasks))
-
 	for k, ta := range q.availableTasks {
-		//log.Infof("Checking %+v", e.Value)
+		//log.Debugf("Checking %+v", e.Value)
 		if time.Since(ta.Emitted) > q.availabilityTimeout {
 			q.m.Unlock()
-			log.Infof("[INFO <%s>] Availability timeout. Feeding back %s (%s, %s) %d tasks", q.Name, ta.UUID, ta.Emitter, ta.Emitted, len(ta.Tasks))
+			log.Debugf("[INFO <%s>] Availability timeout. Feeding back %s (%s, %s) %d tasks", q.Name, ta.UUID, ta.Emitter, ta.Emitted, len(ta.Tasks))
 			// feed back into queue
 			q.wp.jobmu.Lock()
 			for _, p := range ta.Tasks {
@@ -350,12 +325,10 @@ func (q *Quorum) cleanupTimedOutPendingTasks() {
 	q.m.Lock()
 	defer q.m.Unlock()
 
-	//log.Infof("%d pending tasks", len(q.pendingAckTasks))
-
 	for k, ta := range q.pendingAckTasks {
 		if time.Since(ta.Emitted) > q.availabilityTimeout {
 			delete(q.pendingAckTasks, k)
-			log.Infof("[INFO <%s>] Acknowledgment timeout. Removed pending %s (%s, %s) %d tasks", q.Name, ta.UUID, ta.Emitter, ta.Emitted, len(ta.Tasks))
+			log.Debugf("[INFO <%s>] Acknowledgment timeout. Removed pending %s (%s, %s) %d tasks", q.Name, ta.UUID, ta.Emitter, ta.Emitted, len(ta.Tasks))
 			q.internalStatus()
 			return
 		}
@@ -366,13 +339,9 @@ func (q *Quorum) cleanupTimedOutAwaitingTasks() {
 	q.m.Lock()
 	defer q.m.Unlock()
 
-	//log.Infof("%d awaiting responses tasks", len(q.awaitingResponses))
-
 	for k, ta := range q.awaitingResponses {
-		//log.Infof("Checking %+v", e.Value)
 		if time.Since(ta.Emitted) > q.executionTimeout {
-			//log.Infof("Feeding back %s (%s, %s) %d tasks", ta.UUID, ta.Emitter, ta.Emitted, len(ta.Tasks))
-			log.Infof("[INFO <%s>] Execution timeout. Feeding back %s (%s, %s) %d tasks", q.Name, ta.UUID, ta.Emitter, ta.Emitted, len(ta.Tasks))
+			log.Debugf("[INFO <%s>] Execution timeout. Feeding back %s (%s, %s) %d tasks", q.Name, ta.UUID, ta.Emitter, ta.Emitted, len(ta.Tasks))
 			// feed back into queue
 			q.wp.jobmu.Lock()
 			for _, p := range ta.Tasks {
@@ -407,14 +376,6 @@ func (q *Quorum) ShareTasks(tasks []Payload, wp *WorkerPool) {
 
 	// send TaskAvailable message to all instance in quorum
 	q.Broadcast(Global{TaskAvailable: ta, Cmd: "TaskAvailable"})
-	/*
-		for _, inst := range q.instances {
-			if inst.WriteConn == nil {
-				continue
-			}
-			inst.Write(Global{TaskAvailable: ta, Cmd: "TaskAvailable"})
-		}
-	*/
 	q.debug("Broadcasted %s (%d tasks)", ta.UUID, len(tasks))
 }
 
@@ -454,7 +415,6 @@ func (q *Quorum) connectionRoutine() {
 			if inst.WriteConn == nil {
 				err := q.Connect(inst)
 				if err != nil {
-					//q.debug("cannot connect to %s: %s", inst.DSN, err)
 					time.Sleep(100 * time.Millisecond)
 				}
 				if q.hasReadConn(inst) {
@@ -490,7 +450,6 @@ func (q *Quorum) instanceRoutine(conn net.Conn) {
 		conn.Close()
 		return
 	}
-	//q.debug("Received CONNECT: %+v", cmsg)
 
 	found := false
 	for i := range q.instances {
@@ -594,22 +553,6 @@ func (q *Quorum) instanceRoutine(conn net.Conn) {
 //
 // Then push tasks to pending waiting for emitter validation
 func (q *Quorum) handleTasksAvailable(ta *TaskAvailable) {
-	//q.debug("Received %d tasks available from %s", len(ta.Tasks), ta.Emitter)
-
-	// to avoid all instances in quorum trying to accept the same tasks, add random sleep time
-	//rand.Seed(time.Now().UnixNano())
-	//n := rand.Intn(100) // n will be between 0 and 10
-	//	fmt.Printf("Sleeping %d seconds...\n", n)
-	//	time.Sleep(time.Duration(n) * time.Millisecond)
-	// Randomly refuse to accept task
-	//if n > 100/(q.InstancesConnected()-1) {
-	/*
-		ic := q.InstancesConnected()
-		if ic > 2 && n > 100/((q.InstancesConnected()-2)/2) {
-			log.Infof("%d > %d => Randomly refusing", n, 100/((q.InstancesConnected()-2)/2))
-			return
-		}
-	*/
 
 	if ta.Emitter == q.DSN {
 		log.Errorf("WAIT WHY AM I RECEIVING THIS %+v", ta)
@@ -637,16 +580,9 @@ func (q *Quorum) handleTasksAvailable(ta *TaskAvailable) {
 		UUID:     ta.UUID,
 		Emitter:  ta.Emitter,
 		Accepter: q.DSN,
-		//Count:    0,
 	}
 
 	q.m.Lock()
-	/*
-		// Broadcast acceptance to all quorum
-			for _, inst := range q.instances {
-		inst.Write(Global{Cmd: "TaskAcceptance", TaskAcceptance: tacc})
-		}
-	*/
 	emitter, ok := q.instances[ta.Emitter]
 	if !ok {
 		q.m.Unlock()
@@ -661,7 +597,6 @@ func (q *Quorum) handleTasksAvailable(ta *TaskAvailable) {
 
 // handleTaskAcceptance job is to create concensus on quorum of which tasks are attributed to which instance
 func (q *Quorum) handleTaskAcceptance(ta *TaskAcceptance) {
-	//q.debug("Received task acceptance (Emitter: %s, Accepter: %s)", ta.Emitter, ta.Accepter)
 
 	q.m.Lock()
 
@@ -726,24 +661,6 @@ func (q *Quorum) handleTaskAcceptance(ta *TaskAcceptance) {
 	q.m.Unlock()
 
 	accepter.Write(Global{Cmd: "TaskAcceptanceAck", TaskAcceptanceAck: tack})
-
-	/*
-		q.Broadcast(Global{Cmd: "TaskAcceptanceAck", TaskAcceptanceAck: tack})
-	*/
-	/*
-		// Respond to Emitter and Accepter
-		if ta.Accepter != q.DSN {
-			q.instances[ta.Accepter].Write(Global{Cmd: "TaskAcceptanceAck", TaskAcceptanceAck: tack})
-		}
-		if ta.Emitter != q.DSN {
-			q.instances[ta.Emitter].Write(Global{Cmd: "TaskAcceptanceAck", TaskAcceptanceAck: tack})
-		}
-	*/
-	/*
-		for _, inst := range q.instances {
-			inst.Write(Global{Cmd: "TaskAcceptanceAck", TaskAcceptanceAck: tack})
-		}
-	*/
 }
 
 // handleTaskAcceptanceReject when receiving TaskAcceptanceReject,
@@ -763,35 +680,7 @@ func (q *Quorum) handleTaskAcceptanceReject(tr *TaskAcceptanceReject) {
 // - If consensus is reached, Accepter will start executing tasks and preparing TaskResult message
 func (q *Quorum) handleTaskAcceptanceAck(tack *TaskAcceptanceAck) {
 
-	/*
-			q.m.Lock()
-
-			ta, ok := q.acceptedTasks[tack.UUID]
-			if !ok {
-				q.m.Unlock()
-				q.debug("Task %+v not found but acknowledged", tack)
-				return
-			}
-			q.acceptedTasks[tack.UUID].Count++
-			c := ta.Count
-			q.m.Unlock()
-
-		q.debug("[%s] %s ack acceptance (Emitter: %s, Accepter: %s) %d/%d", tack.UUID, tack.Acknowledger, tack.Emitter, tack.Accepter, c, q.InstancesConnected())
-	*/
-
-	// We actually do not need a majority, only Emitter accepting
-	/*
-		// So we want a majority.
-		// Accepter is OK obviously
-		//q.debug("Ack count for %s is %d", tack.UUID, c)
-		if c < q.InstancesConnected()/2 {
-			return
-		}
-		//q.debug("TASK VALIDATED AND ACKNOWLEDGED %s( %d / %d)", tack.UUID, c, q.InstanceCount()/2)
-	*/
-
 	q.m.Lock()
-	//delete(q.acceptedTasks, tack.UUID)
 	q.internalStatus()
 	task, ok := q.pendingAckTasks[tack.UUID]
 	if ok {
@@ -811,15 +700,9 @@ func (q *Quorum) handleTaskAcceptanceAck(tack *TaskAcceptanceAck) {
 			q.debug("Supposed to exec %s but cannot find it in pendingAckTasks...", tack.UUID)
 			return
 		}
-		//go q.exec(task)
 		q.exec(task)
 	}
 
-	/*
-		if tack.Emitter == q.DSN {
-			q.debug("[%s] Task accepted and aknowledged by quorum, removing from availableTasks and moving to awaitingResponses", tack.UUID)
-		}
-	*/
 }
 
 // TODO: Implement and use WorkerPool.ExecBatch
@@ -830,19 +713,14 @@ func (q *Quorum) exec(ta TaskAvailable) {
 		Worker:  q.DSN,
 	}
 
-	//	begin := time.Now()
 	r := make([]Response, len(ta.Tasks))
 
-	/*
-		for _, t := range ta.Tasks {
-			r := Response{}
-			r.Body, r.Err = q.wp.Exec(t.Body)
-			tr.Responses = append(tr.Responses, r)
-		}
-	*/
+	var wg sync.WaitGroup
 	for i, t := range ta.Tasks {
-		if i < len(ta.Tasks)-1 {
+		if i < len(ta.Tasks) {
+			wg.Add(1)
 			go func(i int, t Payload, r *[]Response) {
+				defer wg.Done()
 				resp := Response{}
 				resp.Body, resp.Err = q.wp.Exec(t.Body)
 				(*r)[i] = resp
@@ -850,16 +728,12 @@ func (q *Quorum) exec(ta TaskAvailable) {
 		}
 	}
 
-	t := ta.Tasks[len(ta.Tasks)-1]
-	resp := Response{}
-	resp.Body, resp.Err = q.wp.Exec(t.Body)
-	r[len(ta.Tasks)-1] = resp
+	wg.Wait()
 	tr.Responses = r
 
 	// Send back to Emitter
 	q.instances[ta.Emitter].Write(Global{Cmd: "TaskResult", TaskResult: tr})
 
-	//log.Infof("Exec (%d tasks) done in %s", len(ta.Tasks), time.Since(begin))
 }
 
 func (q *Quorum) handleTaskResult(tr *TaskResult) {
@@ -873,7 +747,7 @@ func (q *Quorum) handleTaskResult(tr *TaskResult) {
 	}
 	delete(q.awaitingResponses, tr.UUID)
 
-	log.Infof("[STATUS <%s>] Got results for task %s %s after emission", q.Name, ta.UUID, time.Since(ta.Emitted))
+	log.Debugf("[STATUS <%s>] Got results for task %s %s after emission", q.Name, ta.UUID, time.Since(ta.Emitted))
 	for i, r := range tr.Responses {
 		p := ta.Tasks[i]
 		if p.ResponseChan != nil {
@@ -923,7 +797,7 @@ func (q *Quorum) debug(format string, vars ...interface{}) {
 	q.m.Lock()
 	name := q.Name
 	q.m.Unlock()
-	log.Infof("[DEBUG <%s>] %s\n", name, d)
+	log.Debugf("[DEBUG <%s>] %s\n", name, d)
 }
 
 func (q *Quorum) removeInstance(inst *Instance) {
@@ -1021,4 +895,25 @@ func (q *Quorum) Broadcast(msg interface{}) {
 		}
 		inst.Write(msg)
 	}
+}
+
+func (q *Quorum) internalStatus() {
+	/*
+		q.m.Lock()
+		defer q.m.Unlock()
+
+			var c = 1
+			for _, inst := range q.instances {
+				if inst.WriteConn != nil && inst.ReadConn != nil {
+					c++
+				}
+			}
+				log.Debugf("[STATUS <%s>] Quorum:%d, Available:%d, PendingAck:%d, Accepted:%d, AwaitingResults:%d", q.Name,
+					c,
+					len(q.availableTasks),
+					len(q.pendingAckTasks),
+					len(q.acceptedTasks),
+					len(q.awaitingResponses),
+				)
+	*/
 }

@@ -16,7 +16,6 @@ func (j *Job) execute(p interface{}) (interface{}, error) {
 	payload := p.(int)
 	f := func(p int) (int, error) {
 		time.Sleep(100 * time.Millisecond)
-		//		fmt.Printf("%d*2 = %d\n", p, p*2)
 		return p * 2, nil
 	}
 	return f(payload)

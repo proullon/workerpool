@@ -25,6 +25,9 @@ var (
 // Note: if both response and error are nil, response will not be stacked
 type JobFnc func(payload interface{}) (response interface{}, err error)
 
+// RunnableFnc is called when quorum is enabled, before accepting Tasks
+type RunnableFnc func(tasks []Payload) bool
+
 // OptFunc defines functionnal parameter to New() function
 type OptFunc func(w *WorkerPool)
 
@@ -81,6 +84,9 @@ type WorkerPool struct {
 	// MaxQueue limits the number of items in the queue.
 	// 0 is unlimited, using list.List
 	MaxQueue int
+
+	// Runnable called when a quorum is formed, before accepting Tasks
+	Runnable RunnableFnc
 
 	status  Status
 	stopped bool
@@ -385,7 +391,9 @@ func (wp *WorkerPool) canAcceptTasks(tasks []Payload) bool {
 		return true
 	}
 
-	// TODO: Add call to user defined callback to help accept or not specific tasks
+	if wp.Runnable != nil {
+		return wp.Runnable(tasks)
+	}
 
 	return false
 }
@@ -400,27 +408,15 @@ func (wp *WorkerPool) shareRoutine() {
 		}
 
 		// nothing to do, yay zZzZzZ
-		//if n == 0 {
 		time.Sleep(10 * time.Millisecond)
-		//		continue
-		//}
 
 		// can we share the load ?
 
-		/*
-			if wp.quorum != nil {
-				shared := wp.quorum.SharedTasks()
-				instances := wp.quorum.InstancesConnected()
-				log.Infof("%d > 3*%d && %d <= %d\n", n, wp.MaxWorker, shared, instances)
-			}
-		*/
 		wp.jobmu.Lock()
 		n := wp.jobq.Len()
-		//shared := wp.quorum.SharedTasks()
-		//instances := wp.quorum.InstancesConnected()
-		//log.Infof("%d > 3*%d && %d <= %d\n", n, wp.MaxWorker, shared, instances)
 		qsize := wp.quorum.InstancesConnected()
-		if wp.quorum != nil && n > 3*wp.MaxWorker && qsize > 1 && wp.quorum.SharedTasks() <= (qsize*10) {
+		mw := wp.maxWorker()
+		if wp.quorum != nil && n > 3*mw && qsize > 1 && wp.quorum.SharedTasks() <= (qsize*10) {
 			// If we have a quorum
 			// and local queue greater than 3 times the max number of worker
 			// qsize if more than 1
@@ -429,7 +425,7 @@ func (wp *WorkerPool) shareRoutine() {
 
 			// share MAX_WORKER last in the queue
 			var tasks []Payload
-			for i := 0; i < wp.MaxWorker; i++ {
+			for i := 0; i < mw; i++ {
 				e := wp.jobq.Back()
 				body := e.Value
 				p := Payload{
@@ -439,7 +435,6 @@ func (wp *WorkerPool) shareRoutine() {
 				wp.jobq.Remove(e)
 				tasks = append(tasks, p)
 			}
-			//log.Warnf("Set %d tasks to be shared", len(tasks))
 			wp.quorum.ShareTasks(tasks, wp)
 		}
 		wp.jobmu.Unlock()
@@ -479,41 +474,6 @@ func (wp *WorkerPool) feedRoutine() {
 		wp.jobmu.Lock()
 		wp.jobq.Remove(e)
 		wp.jobmu.Unlock()
-
-		// can we share the load ?
-
-		/*
-			if wp.quorum != nil {
-				shared := wp.quorum.SharedTasks()
-				instances := wp.quorum.InstancesConnected()
-				log.Infof("%d > 3*%d && %d <= %d\n", n, wp.MaxWorker, shared, instances)
-			}
-		*/
-		/*
-			if wp.quorum != nil && n > 3*wp.MaxWorker && wp.quorum.SharedTasks() <= wp.quorum.InstancesConnected() {
-				// If we have a quorum
-				// and local queue greater than 3 times the max number of worker
-				// and there is less than 3 tasks bundle shared
-				// then yes
-
-				// share MAX_WORKER last in the queue
-				var tasks []Payload
-				wp.jobmu.Lock()
-				for i := 0; i < wp.MaxWorker; i++ {
-					e := wp.jobq.Back()
-					body := e.Value
-					p := Payload{
-						Body: body,
-						Try:  0,
-					}
-					wp.jobq.Remove(e)
-					tasks = append(tasks, p)
-				}
-				wp.jobmu.Unlock()
-				log.Warnf("Set %d tasks to be shared", len(tasks))
-				wp.quorum.ShareTasks(tasks, wp)
-			}
-		*/
 	}
 }
 
@@ -642,12 +602,14 @@ func (wp *WorkerPool) velocityRoutine() {
 		i := wp.index()
 
 		if wp.quorum != nil {
-			wp.MaxWorker = wp.quorum.MaxInstanceWorker()
+			mw := wp.quorum.MaxInstanceWorker()
+			wp.mu.Lock()
+			wp.MaxWorker = mw
+			wp.mu.Unlock()
 			wp.setsize(i)
 		}
 
 		wp.mu.Lock()
-		//		log.Infof("Setting velocity for %d%% (%.2f)", wp.SizePercentil[i], float64(wp.ops[wp.SizePercentil[i]])/float64(wp.EvaluationTime))
 		wp.velocity[wp.SizePercentil[i]] = float64(wp.ops[wp.SizePercentil[i]]) / float64(wp.EvaluationTime)
 		wp.mu.Unlock()
 
@@ -741,4 +703,11 @@ func (wp *WorkerPool) retry(payload *Payload) {
 	go func() {
 		wp.jobch <- payload
 	}()
+}
+
+func (wp *WorkerPool) maxWorker() int {
+	wp.mu.RLock()
+	mw := wp.MaxWorker
+	wp.mu.RUnlock()
+	return mw
 }

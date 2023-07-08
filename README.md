@@ -41,7 +41,7 @@ func (j *Job) execute(p interface{}) (interface{}, error) {
 }
 ```
 
-Example behavior with network and database operation:
+Example behaviour with network and database operation:
 ```
 Velocity:
 1% : 10op/s
