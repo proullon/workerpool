@@ -312,6 +312,10 @@ func TestExec(t *testing.T) {
 
 	job := &Job{}
 
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
 	wp, err := New(job.execute,
 		WithMaxWorker(15),
 		WithEvaluationTime(1),

@@ -282,6 +282,10 @@ func TestQuorumSharedTasksSolo(t *testing.T) {
 	maxQueue := 2 * 1000
 	eps := 3.0
 
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
 	wp, err := New(job.execute,
 		WithSizePercentil(AllInSizesPercentil),
 		WithMaxWorker(localMax),
@@ -333,6 +337,10 @@ func TestQuorumSharedTasksDuo(t *testing.T) {
 	globalMax := 30
 	maxQueue := 2 * 1000
 	eps := 3.0
+
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
 
 	wp, err := New(job.execute,
 		WithSizePercentil(AllInSizesPercentil),
@@ -405,6 +413,10 @@ func TestQuorumSharedTasksTrio(t *testing.T) {
 	globalMax := 30
 	maxQueue := 2 * 1000
 	eps := 3.0
+
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
 
 	wp, err := New(job.execute,
 		WithSizePercentil(AllInSizesPercentil),
@@ -493,6 +505,10 @@ func TestQuorumSharedTasksQuatuor(t *testing.T) {
 	globalMax := 30
 	maxQueue := 10 * 1000
 	eps := 3.0
+
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
 
 	wp, err := New(job.execute,
 		WithSizePercentil(AllInSizesPercentil),

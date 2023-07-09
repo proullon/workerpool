@@ -387,7 +387,7 @@ func (wp *WorkerPool) canAcceptTasks(tasks []Payload) bool {
 	n := wp.jobq.Len()
 	wp.jobmu.Unlock()
 
-	if n < wp.MaxWorker {
+	if n < wp.maxWorker() {
 		return true
 	}
 
